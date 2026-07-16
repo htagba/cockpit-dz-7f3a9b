@@ -1,9 +1,1 @@
-{
-  "account": "",
-  "type": "",
-  "company": "",
-  "currency": "USD",
-  "balance": 0,
-  "exportedAt": "en attente des donnees du VPS",
-  "trades": []
-}
+{"schemaVersion":"2.0","account":"4000095732","type":"reel","company":"Tradeslide Trading Tech Limited","currency":"USD","deposit":100000.00,"exportedAt":"2026.07.16 22:45","exportedAtIso":"2026-07-16T22:45:50+03:00","serverGmtOffsetSeconds":10800,"tradesCount":0,"trades":[]}
