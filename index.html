@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cockpit Darwinex Zero</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0e1117; --panel:#161b22; --panel2:#1c2230; --border:#2a3140;
+    --text:#e6edf3; --muted:#8b95a5; --dim:#5c6675;
+    --green:#2ea043; --green-soft:#1f3326; --red:#f85149; --red-soft:#3a1d1f;
+    --amber:#d29922; --amber-soft:#352a14; --blue:#388bfd; --blue-soft:#13243f;
+    --accent:#7c6df2;
+    --radius:12px; --radius-sm:8px;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 22px 60px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,var(--accent),var(--blue));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;color:#fff}
+  .brand h1{font-size:18px;font-weight:600;letter-spacing:-.2px}
+  .brand .sub{font-size:12px;color:var(--muted)}
+  .conn{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 12px;border-radius:999px;border:1px solid var(--border);background:var(--panel)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+  .dot.on{background:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
+  .dot.off{background:var(--red);box-shadow:0 0 0 3px var(--red-soft)}
+  button{font-family:inherit;font-size:13px;color:var(--text);background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;cursor:pointer;transition:.12s;display:inline-flex;align-items:center;gap:7px}
+  button:hover{border-color:var(--accent);background:#222a3a}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.08)}
+  button.ghost{background:transparent}
+  button.sm{padding:5px 10px;font-size:12px}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:22px;flex-wrap:wrap}
+  .tab{padding:10px 16px;font-size:14px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:7px}
+  .tab:hover{color:var(--text)}
+  .tab.active{color:var(--text);border-bottom-color:var(--accent);font-weight:500}
+  .view{display:none}
+  .view.active{display:block;animation:fade .2s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .grid{display:grid;gap:14px}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:880px){.g4{grid-template-columns:repeat(2,1fr)}.g3,.g2{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+  .card h3{font-size:13px;font-weight:500;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between}
+  .stat{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+  .stat .lab{font-size:12px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .stat .val{font-size:26px;font-weight:600;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+  .stat .delta{font-size:12px;margin-top:4px;color:var(--muted)}
+  .pos{color:var(--green)} .neg{color:var(--red)} .warn{color:var(--amber)}
+  .section-title{font-size:15px;font-weight:600;margin:26px 0 12px;display:flex;align-items:center;gap:8px}
+  .bar{height:13px;border-radius:999px;background:var(--panel2);position:relative;overflow:hidden;border:1px solid var(--border)}
+  .bar > span{position:absolute;left:0;top:0;bottom:0;border-radius:999px;transition:width .5s}
+  .barline{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--red)}
+  .meta{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;margin-top:8px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border)}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--dim);font-weight:500}
+  td{font-variant-numeric:tabular-nums}
+  tr:last-child td{border-bottom:none}
+  .setcard{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative}
+  .setcard .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .setname{font-weight:600;font-size:15px;background:none;border:none;color:var(--text);width:100%;padding:2px 4px;border-radius:5px}
+  .setname:hover,.setname:focus{background:var(--panel2);outline:none}
+  .setpl{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .chip{font-size:11px;padding:3px 8px;border-radius:6px;background:var(--panel2);color:var(--muted)}
+  input[type=text],input[type=number],select{font-family:inherit;font-size:13px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 11px;width:100%}
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:5px}
+  .field{margin-bottom:14px}
+  .row{display:flex;gap:12px}.row>*{flex:1}
+  .alert{border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;display:flex;gap:10px;align-items:flex-start;margin-bottom:10px;border:1px solid}
+  .alert.info{background:var(--blue-soft);border-color:#1d3a5f;color:#9cc7ff}
+  .alert.ok{background:var(--green-soft);border-color:#1f4a2c;color:#7ee2a0}
+  .alert.warn{background:var(--amber-soft);border-color:#4a3a14;color:#f0cd6e}
+  .alert.danger{background:var(--red-soft);border-color:#5a2226;color:#ff9b95}
+  .ico{width:18px;height:18px;flex-shrink:0}
+  .gauge-score{display:flex;align-items:center;gap:18px}
+  .ring{position:relative;width:108px;height:108px;flex-shrink:0}
+  .ring svg{transform:rotate(-90deg)}
+  .ring .num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .ring .num b{font-size:28px;font-weight:700}
+  .ring .num small{font-size:10px;color:var(--muted)}
+  canvas{max-width:100%}
+  .empty{text-align:center;color:var(--dim);padding:40px 20px;font-size:13px}
+  .help{font-size:11px;color:var(--dim);margin-top:4px}
+  .kpi-mini{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
+  .kpi-mini:last-child{border:none}
+  .kpi-mini .v{font-weight:600;font-variant-numeric:tabular-nums}
+  .tag{font-size:10px;padding:2px 7px;border-radius:5px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+  .tag.g{background:var(--green-soft);color:#7ee2a0}
+  .tag.a{background:var(--amber-soft);color:#f0cd6e}
+  .tag.r{background:var(--red-soft);color:#ff9b95}
+  details{margin-top:10px}
+  summary{cursor:pointer;font-size:12px;color:var(--muted)}
+  pre{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:var(--mono);font-size:11px;overflow:auto;max-height:240px;margin-top:8px;color:var(--muted)}
+  .foot{margin-top:30px;font-size:11px;color:var(--dim);text-align:center;line-height:1.7}
+  .dz{border:2px dashed var(--border);border-radius:var(--radius);padding:26px;text-align:center;color:var(--muted);font-size:13px;cursor:pointer}
+  .dz.drag{border-color:var(--accent);background:var(--panel2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">DZ</div>
+      <div>
+        <h1>Cockpit Darwinex Zero</h1>
+        <div class="sub" id="acctLine">Aucun compte connecté</div>
+      </div>
+    </div>
+    <div class="conn">
+      <span class="pill"><span class="dot" id="connDot"></span><span id="connTxt">Déconnecté</span></span>
+      <span class="pill" id="syncPill" style="display:none"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg><span id="syncTxt">—</span></span>
+      <button class="primary" id="btnConnect"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>Connecter le fichier</button>
+      <button class="ghost sm" id="btnRefresh" title="Relire maintenant"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+    </div>
+  </header>
+
+  <div id="staleBanner" class="alert danger" style="display:none;margin-bottom:14px"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div id="staleMsg"></div></div>
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-v="cockpit"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Cockpit</div>
+    <div class="tab" data-v="darwinex"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>Darwinex</div>
+    <div class="tab" data-v="sets"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Tous mes sets</div>
+    <div class="tab" data-v="risk"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>Garde-fou risque</div>
+    <div class="tab" data-v="analyse"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Analyse</div>
+    <div class="tab" data-v="backtests"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M19 9l-5 5-4-4-4 4"/></svg>Backtests</div>
+    <div class="tab" data-v="journal"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>Journal & courbe</div>
+  </div>
+
+  <!-- COCKPIT -->
+  <div class="view active" id="v-cockpit">
+    <div class="grid g4" id="topStats"></div>
+
+    <div class="grid g2" style="margin-top:14px">
+      <div class="card">
+        <h3>Drawdown vs limite de sécurité</h3>
+        <div class="bar" id="ddBar"><span style="width:0%;background:var(--green)"></span><div class="barline" id="ddLine" style="left:60%"></div></div>
+        <div class="meta"><span id="ddMetaL">—</span><span id="ddMetaR">—</span></div>
+        <div style="margin-top:16px">
+          <div class="meta" style="margin:0 0 6px"><span>🔥 Risque engagé (positions ouvertes)</span><span id="heatTxt">—</span></div>
+          <div class="bar"><span id="heatBar" style="width:0%;background:var(--amber)"></span></div>
+          <div class="help" id="heatHelp" style="margin-top:6px">Somme du risque des positions actuellement ouvertes (distance au SL × lot). Nécessite l'export des positions ouvertes par l'EA.</div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>DScore estimé <span class="tag a" id="dsTag">—</span></h3>
+        <div class="gauge-score">
+          <div class="ring">
+            <svg width="108" height="108"><circle cx="54" cy="54" r="46" stroke="var(--panel2)" stroke-width="11" fill="none"/><circle id="dsRing" cx="54" cy="54" r="46" stroke="var(--accent)" stroke-width="11" fill="none" stroke-linecap="round" stroke-dasharray="289" stroke-dashoffset="289"/></svg>
+            <div class="num"><b id="dsNum">—</b><small>/ 100</small></div>
+          </div>
+          <div style="flex:1" id="dsBreak"></div>
+        </div>
+        <div class="help">Estimation maison (rendement + drawdown + régularité). Repères Darwinex : 55 → −20 % commissions, 60 → −40 %.</div>
+      </div>
+    </div>
+
+    <div class="grid g2" style="margin-top:14px">
+      <div class="card">
+        <h3>Phase de calibration (création du DARWIN)</h3>
+        <div style="margin-bottom:14px">
+          <div class="meta" style="margin:0 0 6px"><span>Trades clôturés</span><span id="calTradesTxt">0 / 25</span></div>
+          <div class="bar"><span id="calTradesBar" style="width:0%;background:var(--blue)"></span></div>
+        </div>
+        <div>
+          <div class="meta" style="margin:0 0 6px"><span>Jours de trading</span><span id="calDaysTxt">0 / 15</span></div>
+          <div class="bar"><span id="calDaysBar" style="width:0%;background:var(--blue)"></span></div>
+        </div>
+        <div class="help" id="calHelp">Objectif : ≥ 25 trades et ≥ 15 jours de trading. Aucun objectif de profit, aucune limite de temps.</div>
+      </div>
+      <div class="card">
+        <h3>Conseils du garde-fou</h3>
+        <div id="advice"><div class="empty">Connecte ton fichier pour recevoir des conseils.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DARWINEX -->
+  <div class="view" id="v-darwinex">
+    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Cet onglet suit ce que Darwinex <b>récompense vraiment</b> : allocation DarwinIA, régularité du risque et diversification entre tes sets. Toutes les notes sont des <b>estimations</b> pour te guider.</div></div>
+
+    <div class="card">
+      <h3>Suivi DarwinIA — objectif note ≥ 75 (allocation de capital)</h3>
+      <div class="gauge-score">
+        <div class="ring">
+          <svg width="108" height="108"><circle cx="54" cy="54" r="46" stroke="var(--panel2)" stroke-width="11" fill="none"/><circle id="diaRing" cx="54" cy="54" r="46" stroke="var(--accent)" stroke-width="11" fill="none" stroke-linecap="round" stroke-dasharray="289" stroke-dashoffset="289"/></svg>
+          <div class="num"><b id="diaNum">—</b><small>/ 100</small></div>
+        </div>
+        <div style="flex:1" id="diaBreak"></div>
+      </div>
+      <div class="bar" style="margin-top:14px"><span id="diaBar" style="width:0%;background:var(--accent)"></span><div class="barline" id="diaLine" style="left:75%;background:var(--green)"></div></div>
+      <div class="meta"><span id="diaMetaL">—</span><span id="diaMetaR">seuil allocation : 75</span></div>
+      <div id="diaChecklist" style="margin-top:12px"></div>
+      <div class="help">Estimation basée sur les critères DarwinIA (rendement du mois + 5 mois glissants + drawdown 6 mois). Allocation min 30 000 € à partir de 75. Corrélation &lt; 0,95 exigée, équité min 1 000 $.</div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>Consistance du risque <span class="tag a" id="riskConsTag">—</span></h3>
+      <div class="grid g3" id="riskConsStats" style="margin-bottom:6px"></div>
+      <div class="bar" style="margin-top:4px"><span id="riskConsBar" style="width:0%;background:var(--green)"></span></div>
+      <div class="meta"><span>Régularité du risque pris trade après trade</span><span id="riskConsScore">—</span></div>
+      <div style="overflow:auto;max-height:300px;margin-top:12px">
+        <table id="riskConsTable"><thead><tr><th>Clôture</th><th>Set</th><th>Symbole</th><th>Lots</th><th>Risque $</th><th>Risque %</th><th>vs 0,1 %</th></tr></thead><tbody><tr><td colspan="7" class="empty">Aucune donnée.</td></tr></tbody></table>
+      </div>
+      <div class="help">Risque calculé à l'entrée = distance au SL × lots × valeur du point ÷ solde. Cible 0,1 %. Un risque régulier fait monter ton DScore. Si un symbole est mal évalué, ajuste sa « valeur du point » dans l'onglet Garde-fou.</div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>Corrélation entre tes sets</h3>
+      <div id="corrMatrix"><div class="empty">Pas encore assez de données pour calculer la corrélation.</div></div>
+      <div class="help">Deux sets fortement corrélés (proches de +1) = redondance pénalisée par Darwinex et risque concentré. Vise des sets décorrélés (proches de 0 ou négatifs). Calcul sur le P&amp;L quotidien commun.</div>
+    </div>
+  </div>
+
+  <!-- SETS -->
+  <div class="view" id="v-sets">
+    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Tes sets sont détectés automatiquement par <b>magic number</b> (ou commentaire / symbole). Clique sur un nom pour le renommer — c'est sauvegardé. Risque cible : <b id="riskTargetTxt">0,1 %</b> par trade.</div></div>
+    <div class="grid g2" id="setGrid"><div class="empty">Aucun set détecté pour l'instant.</div></div>
+  </div>
+
+  <!-- RISK -->
+  <div class="view" id="v-risk">
+    <div class="grid g2">
+      <div class="card">
+        <h3>Paramètres de risque</h3>
+        <div class="field"><label>Capital de référence (USD)</label><input type="number" id="setBalance" value="100000"><div class="help">Pré-rempli depuis ton compte. Le risque se calcule sur ce montant.</div></div>
+        <div class="field"><label>Risque par trade (%)</label><input type="number" id="setRiskPct" value="0.1" step="0.01"></div>
+        <div class="row">
+          <div class="field"><label>Seuil d'alerte drawdown (%)</label><input type="number" id="setDdWarn" value="6" step="0.5"></div>
+          <div class="field"><label>Drawdown max toléré (%)</label><input type="number" id="setDdMax" value="10" step="0.5"></div>
+        </div>
+        <button class="primary" id="saveRisk">Enregistrer</button>
+      </div>
+      <div class="card">
+        <h3>Calculateur de lot (0,1 % par trade)</h3>
+        <div class="field"><label>Symbole</label><select id="calcSym">
+          <option value="forex">Forex (EURUSD, GBPUSD…)</option>
+          <option value="jpy">Paire en JPY (USDJPY…)</option>
+          <option value="xau">Or — XAUUSD</option>
+          <option value="idx">Indice (US30, NAS100…)</option>
+        </select></div>
+        <div class="field"><label>Stop-loss (en points/pips)</label><input type="number" id="calcSl" value="200"></div>
+        <div class="field"><label>Valeur du point pour 1 lot (USD) — ajuste selon ton broker</label><input type="number" id="calcPipVal" value="10" step="0.01"></div>
+        <div class="stat" style="background:var(--panel2)">
+          <div class="lab">Risque en USD &nbsp;·&nbsp; Taille de lot suggérée</div>
+          <div class="val"><span id="calcRiskUsd">100 $</span> &nbsp;→&nbsp; <span id="calcLots" class="pos">—</span></div>
+        </div>
+        <div class="help">Lot = (capital × risque%) ÷ (SL points × valeur du point). Vérifie toujours la valeur du point sur ton broker.</div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3>Budget de risque par set</h3>
+      <table id="riskTable"><thead><tr><th>Set</th><th>Trades</th><th>Perte cumulée</th><th>Drawdown</th><th>Part du budget risque</th><th>État</th></tr></thead><tbody><tr><td colspan="6" class="empty">Aucune donnée.</td></tr></tbody></table>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>Sauvegarde de la configuration</h3>
+      <div class="help" style="margin-bottom:12px">Tout ton paramétrage (backtests importés, noms/magics des sets, réglages, historique) est stocké dans <b>ce navigateur uniquement</b>. Exporte-le régulièrement pour ne rien perdre en cas d'effacement des données du navigateur ou de changement de machine.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button id="cfgExport"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Exporter la config</button>
+        <label style="display:inline-flex;align-items:center;gap:7px;font-size:13px;background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;cursor:pointer"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5-5 5 5M12 15V3"/></svg>Importer une config<input type="file" id="cfgImport" accept=".json,application/json" style="display:none"></label>
+      </div>
+      <div id="cfgMsg" class="help" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- ANALYSE -->
+  <div class="view" id="v-analyse">
+    <div class="grid g4" id="expStats"></div>
+
+    <div class="grid g2" style="margin-top:14px">
+      <div class="card">
+        <h3>Espérance & R-multiples <span class="tag a" id="expTag">—</span></h3>
+        <div id="expBreak"></div>
+        <div class="help">Le « R » exprime chaque résultat en multiple du risque pris (1 R = ta mise de 0,1 %). Espérance = gain moyen par trade en R. Positive = système gagnant. Calculé sur les trades avec SL connu.</div>
+      </div>
+      <div class="card">
+        <h3>Performance par session <span style="font-weight:400;color:var(--dim);font-size:11px">(heure serveur GMT+3)</span></h3>
+        <table id="sessTable"><thead><tr><th>Session</th><th>Trades</th><th>P&L</th><th>Réussite</th></tr></thead><tbody><tr><td colspan="4" class="empty">Aucune donnée.</td></tr></tbody></table>
+        <div class="help">Asie 0–8h · Londres 8–16h · New York 16–24h. Repère les créneaux qui te rapportent ou te coûtent.</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>Performance par symbole</h3>
+      <table id="symTable"><thead><tr><th>Symbole</th><th>Trades</th><th>P&L</th><th>Réussite</th><th>R moyen</th><th>Espérance</th></tr></thead><tbody><tr><td colspan="6" class="empty">Aucune donnée.</td></tr></tbody></table>
+      <div class="help">Un symbole avec R moyen négatif sur plusieurs trades = candidat à couper ou à retravailler.</div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>Répartition du P&L par heure d'ouverture</h3>
+      <div id="hourBars" style="position:relative;display:flex;align-items:stretch;gap:3px;height:120px;margin-top:8px"></div>
+      <div id="hourAxis" style="display:flex;gap:3px;margin-top:4px"></div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">Rendements mensuels</h3>
+        <select id="heatSource" style="width:auto">
+          <option value="live">Live réel</option>
+          <option value="backtest">Portefeuille backtest (÷10)</option>
+        </select>
+      </div>
+      <div id="monthHeat" style="overflow:auto;margin-top:12px"></div>
+      <div class="help">Chaque cellule = rendement du mois (vert = positif, rouge = négatif). Aligné sur le scoring DarwinIA, qui note le rendement mois par mois. Le backtest est ramené à ton risque de 0,1 % (÷10).</div>
+    </div>
+  </div>
+
+  <!-- BACKTESTS -->
+  <div class="view" id="v-backtests">
+    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Importe le rapport HTML de backtest de chaque set (MT5 Strategy Tester ou relevé). L'app trace les courbes, combine le portefeuille, et le compare à ton live. Backtests à <b id="btRiskTxt">1 %</b>/trade, live à <b>0,1 %</b> — la comparaison est ramenée à la même échelle.</div></div>
+
+    <div class="dz" id="btDrop"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:26px;height:26px"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg><div style="margin-top:8px">Glisse ici les rapports HTML de tes backtests<br>ou <label style="color:var(--accent);cursor:pointer;text-decoration:underline">parcours tes fichiers<input type="file" id="btFile" accept=".htm,.html" multiple style="display:none"></label></div></div>
+
+    <div id="btToolbar" style="display:none;justify-content:space-between;align-items:center;gap:8px;margin-top:12px">
+      <span id="btCount" style="font-size:13px;color:var(--muted)"></span>
+      <button class="ghost sm" id="btClearAll" style="border-color:var(--red);color:var(--red)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>Tout effacer</button>
+    </div>
+
+    <div class="card" style="margin-top:14px" id="btAllCard">
+      <h3>Courbes de tous les backtests <span style="font-weight:400;color:var(--dim);font-size:11px">(clique un nom dans la légende pour l'afficher/masquer)</span></h3>
+      <canvas id="btAllChart" height="120"></canvas>
+    </div>
+
+    <details id="btListWrap" style="margin-top:14px">
+      <summary style="cursor:pointer;padding:11px 14px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-weight:500;color:var(--text);user-select:none">Détail et réglages de chaque backtest</summary>
+      <div id="btList" style="margin-top:10px"></div>
+    </details>
+
+    <div class="card" style="margin-top:14px" id="btComboCard">
+      <h3>Portefeuille combiné <span id="btComboMeta" style="font-weight:400;color:var(--dim);font-size:11px"></span></h3>
+      <canvas id="btComboChart" height="100"></canvas>
+      <div class="grid g4" id="btComboStats" style="margin-top:14px"></div>
+    </div>
+
+    <div class="card" style="margin-top:14px" id="btCmpCard">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">Live réel vs référence backtest</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <select id="btPeriod" style="width:auto">
+            <option value="full">Historique complet</option>
+            <option value="sincelive">Depuis le live</option>
+          </select>
+          <select id="btNorm" style="width:auto">
+            <option value="scaled">Équivalent 0,1 % (÷10)</option>
+            <option value="base100">Base 100 (forme)</option>
+            <option value="raw">% réels bruts</option>
+          </select>
+        </div>
+      </div>
+      <canvas id="btCmpChart" height="110" style="margin-top:10px"></canvas>
+      <div id="btCmpNote" class="help" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- JOURNAL -->
+  <div class="view" id="v-journal">
+    <div class="card">
+      <h3>Courbe d'équité <span id="curveSrc" style="font-weight:400;color:var(--dim)"></span></h3>
+      <canvas id="equityChart" height="110"></canvas>
+    </div>
+    <div class="grid g4" id="journalStats" style="margin-top:14px"></div>
+    <div class="card" style="margin-top:14px">
+      <h3>Historique des trades clôturés</h3>
+      <div style="overflow:auto;max-height:420px">
+        <table id="tradesTable"><thead><tr><th>#</th><th>Set</th><th>Symbole</th><th>Sens</th><th>Lots</th><th>Clôture</th><th>P&L</th></tr></thead><tbody><tr><td colspan="7" class="empty">Aucun trade clôturé.</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Cockpit Darwinex Zero · application locale, tes données ne quittent jamais ton ordinateur.<br>
+    Lance « Lancer-Cockpit.bat » : lecture auto du fichier MT5 toutes les 5 min, sur tous les navigateurs. Estimations indicatives, pas un conseil en investissement.
+  </div>
+</div>
+
+<script>
+const FILE_NAME = "Synchronisation APP Gestion portefeuille-Reel";
+const POLL_MS = 5*60*1000;
+const DATA_ENDPOINT = "data.json";
+const SERVER_MODE = location.protocol.startsWith('http');
+let fileHandle=null, pollTimer=null, lastData=null, chart=null, lastA=null, cvMap={};
+
+/* ---------- persistence (settings + names + equity snapshots) ---------- */
+const LS='dzcockpit.v1';
+function loadStore(){ try{return JSON.parse(localStorage.getItem(LS))||{}}catch(e){return{}} }
+function saveStore(s){ localStorage.setItem(LS,JSON.stringify(s)); }
+let store = Object.assign({setNames:{}, equitySnaps:[], settings:{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10}}, loadStore());
+store.setNames=store.setNames||{}; store.equitySnaps=store.equitySnaps||[]; store.settings=store.settings||{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10};
+// Correspondance magic number -> nom du backtest (tes renommages manuels restent prioritaires).
+const DEFAULT_SET_NAMES = {
+  "magic:1":"2002 eurusd 4h swing 15m entry",
+  "magic:2":"2003 usdjpy 4h swing 20m entry",
+  "magic:3":"2000 gold 2h swing 6m entry",
+  "magic:4":"2001 gold 8h swing 12m entry",
+  "magic:5":"5 Gold London Sweep 10m Entry",
+  "magic:6":"6 GDAXI 4h Swing 20m Entry",
+  "magic:23615":"Slot 1 - EURJPY H1 Risk 1% - Dolt MultiStrategy",
+  "magic:36381":"Slot 3 - NZDUSD H1 Risk 1% - Dolt MultiStrategy",
+  "magic:27788":"Slot 4 - SP500 H1 Risk 1% - Dolt MultiStrategy",
+  "magic:44650":"Slot 5 - SP500 M15 Risk 1% - Dolt MultiStrategy",
+  "magic:15150":"Slot 2 - USDJPY H1 Risk 1% - Dolt MultiStrategy",
+  "magic:20567":"Slot 6 - XAUUSD M15 Risk 1% - Dolt MultiStrategy",
+  "magic:33940":"Slot 8 - XAUUSD H1 Risk 1% - Dolt MultiStrategy"
+};
+store.setNames = Object.assign({}, DEFAULT_SET_NAMES, store.setNames);
+
+/* ---------- IndexedDB for the file handle ---------- */
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('dzcockpit',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});}
+async function idbSet(k,v){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error)});}
+async function idbGet(k){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction('kv','readonly');const rq=t.objectStore('kv').get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error)});}
+
+/* ---------- helpers ---------- */
+const fmt=(n,d=2)=>Number(n).toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const money=n=>fmt(n,2)+' $';
+const pct=(n,d=2)=>fmt(n,d)+' %';
+const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+const pick=(o,keys)=>{for(const k of keys){if(o[k]!==undefined&&o[k]!==null&&o[k]!=='')return o[k];}return undefined;};
+
+/* normalize a trade object from an unknown-but-MT5-ish schema */
+function normTrade(t){
+  const num=v=>v===undefined?undefined:Number(v);
+  const typeRaw=pick(t,['type','direction','side','cmd','orderType']);
+  let dir = (typeof typeRaw==='string') ? typeRaw.toLowerCase() : (typeRaw===1?'sell':typeRaw===0?'buy':String(typeRaw||''));
+  dir = dir.includes('sell')||dir.includes('short')?'sell':dir.includes('buy')||dir.includes('long')?'buy':dir;
+  const profit=num(pick(t,['profit','pnl','result','gain']))||0;
+  const commission=num(pick(t,['commission','commissions','fee']))||0;
+  const swap=num(pick(t,['swap','swaps','rollover']))||0;
+  // Darwinex prélève la commission à l'ouverture ET à la fermeture ; le champ
+  // "commission" du fichier ne contient qu'un côté -> on la compte x2 (round-turn).
+  const net = (pick(t,['netProfit'])!==undefined)? num(pick(t,['netProfit'])) : (profit+swap+commission*2);
+  const closeT=pick(t,['closeTimeIso','closeTime','close','timeClose','closedAt','exitTime']);
+  const openT=pick(t,['openTimeIso','openTime','open','timeOpen','openedAt','entryTime']);
+  const state=pick(t,['state','status']);
+  const hasClose = closeT!==undefined && String(closeT).trim()!=='';
+  const isOpen = (state && String(state).toLowerCase().includes('open')) || !hasClose;
+  return {
+    ticket: pick(t,['ticket','id','order','dealId','position'])||'',
+    symbol: pick(t,['symbol','instrument','pair','asset'])||'?',
+    dir,
+    lots: num(pick(t,['lots','volume','size','qty','lot']))||0,
+    openPrice: num(pick(t,['openPrice','priceOpen','entry'])),
+    closePrice: num(pick(t,['closePrice','priceClose','exit'])),
+    sl: num(pick(t,['sl','stopLoss','stop'])),
+    tp: num(pick(t,['tp','takeProfit','target'])),
+    magic: pick(t,['magic','magicNumber','magicNo','strategyId','expertId']),
+    comment: pick(t,['comment','label','tag','setName'])||'',
+    profit:net, gross:profit, commission, swap,
+    openHour: (function(v){const m=v&&String(v).match(/[T ](\d{2}):/);return m?parseInt(m[1],10):null;})(openT),
+    openTime: parseT(openT), closeTime: parseT(closeT),
+    open: !!isOpen,
+    raw:t
+  };
+}
+function parseT(v){ if(!v) return null; if(typeof v==='number'){ return new Date(v < 1e12 ? v*1000 : v);} const s=String(v).replace(/\./g,'-').replace(' ','T'); const d=new Date(s); return isNaN(d)?null:d; }
+
+/* group key for a set */
+// Trades arrivés sans magic (0) mais identifiables par symbole -> rattachés au bon set.
+const MAGIC0_ALIAS = { 'XAUUSD':'20567', 'EURJPY':'23615' };
+function setKey(t){
+  const m=t.magic;
+  if(m!==undefined&&m!==''&&m!==0&&m!=='0') return 'magic:'+m;
+  if(MAGIC0_ALIAS[t.symbol]) return 'magic:'+MAGIC0_ALIAS[t.symbol];
+  if(t.comment) return 'cmt:'+t.comment;
+  return 'sym:'+t.symbol;
+}
+function setLabel(key){ if(store.setNames[key])return store.setNames[key]; const v=key.split(':').slice(1).join(':'); if(key.startsWith('magic:'))return 'Magic '+v; if(key.startsWith('cmt:'))return v; return v; }
+
+/* ---------- core compute ---------- */
+function analyze(data){
+  // Le champ "deposit" exporté par l'EA = solde COURANT du compte (pas le dépôt initial figé).
+  const curBalance = Number(pick(data,['balance','deposit','initialBalance','startBalance'])||store.settings.balance||100000);
+  const trades=(data.trades||[]).map(normTrade);
+  const closed=trades.filter(t=>!t.open);
+  const open=trades.filter(t=>t.open);
+  // realized & floating
+  const realized=closed.reduce((s,t)=>s+t.profit,0);
+  const floating=open.reduce((s,t)=>s+t.profit,0);
+  const balance=curBalance;                 // solde = ce que renvoie le broker
+  const equity=curBalance+floating;         // équité = solde + P&L flottant des positions ouvertes
+  const dep=balance-realized;               // dépôt initial reconstitué (~100 000) pour la courbe et le rendement
+  // groups
+  const groups={};
+  trades.forEach(t=>{const k=setKey(t);(groups[k]=groups[k]||{key:k,trades:[],closed:[],open:[],pl:0,floating:0}); groups[k].trades.push(t); if(t.open){groups[k].open.push(t);groups[k].floating+=t.profit;}else{groups[k].closed.push(t);groups[k].pl+=t.profit;}});
+  // equity curve from closed trades (by close time)
+  const sorted=closed.slice().filter(t=>t.closeTime).sort((a,b)=>a.closeTime-b.closeTime);
+  let run=dep; const curve=[{x:null,y:dep,label:'Départ'}];
+  sorted.forEach(t=>{run+=t.profit;curve.push({x:t.closeTime,y:run,label:t.closeTime.toLocaleDateString('fr-FR')});});
+  // max drawdown on curve
+  let peak=dep,maxDD=0,maxDDpct=0;
+  curve.forEach(p=>{if(p.y>peak)peak=p.y;const dd=peak-p.y;const ddp=peak>0?dd/peak*100:0;if(ddp>maxDDpct){maxDDpct=ddp;maxDD=dd;}});
+  // current drawdown (equity vs running peak incl. floating)
+  const curPeak=Math.max(peak,equity);
+  const curDDpct=curPeak>0?(curPeak-equity)/curPeak*100:0;
+  // trading days
+  const days=new Set(sorted.map(t=>t.closeTime.toISOString().slice(0,10)));
+  // stats
+  const wins=closed.filter(t=>t.profit>0), losses=closed.filter(t=>t.profit<0);
+  const grossW=wins.reduce((s,t)=>s+t.profit,0), grossL=Math.abs(losses.reduce((s,t)=>s+t.profit,0));
+  const winRate=closed.length?wins.length/closed.length*100:0;
+  const pf=grossL>0?grossW/grossL:(grossW>0?Infinity:0);
+  const retPct=dep>0?realized/dep*100:0;
+  // returns per day for consistency
+  const dayPnl={}; sorted.forEach(t=>{const k=t.closeTime.toISOString().slice(0,10);dayPnl[k]=(dayPnl[k]||0)+t.profit;});
+  const dvals=Object.values(dayPnl);
+  let consistency=0;
+  if(dvals.length>=2){const m=dvals.reduce((a,b)=>a+b,0)/dvals.length;const sd=Math.sqrt(dvals.reduce((a,b)=>a+(b-m)*(b-m),0)/dvals.length);const cv=m!==0?Math.abs(sd/m):3;consistency=clamp(100-cv*30,0,100);}
+  return {dep,trades,closed,open,realized,floating,balance,equity,groups,curve,maxDDpct,curDDpct,days:days.size,winRate,pf,grossW,grossL,retPct,wins:wins.length,losses:losses.length,consistency,dayPnl};
+}
+
+/* DScore-style estimate (transparent, not the real proprietary one) */
+function estimateDScore(a){
+  // profitability component (0-45): scaled return, soft cap
+  const prof=clamp(45*(1-Math.exp(-Math.max(a.retPct,0)/8)),0,45) - clamp(Math.max(-a.retPct,0)*1.5,0,25);
+  // drawdown component (0-30): less DD = more
+  const ddComp=clamp(30*(1-a.maxDDpct/12),0,30);
+  // consistency (0-25)
+  const cons=clamp(a.consistency*0.25,0,25);
+  const raw=clamp(prof+ddComp+cons,0,100);
+  return {score:Math.round(raw),prof:Math.round(Math.max(prof,0)),dd:Math.round(ddComp),cons:Math.round(cons)};
+}
+
+/* ---------- rendering ---------- */
+function render(){
+  if(!lastData){return;}
+  const a=analyze(lastData);
+  cvMap=buildCvMap(a.closed);
+  store.settings.balance=Math.round(a.balance);
+  document.getElementById('setBalance').value=Math.round(a.balance);
+  renderTop(a); renderDD(a); renderScore(a); renderCalibration(a); renderAdvice(a);
+  renderSets(a); renderRiskTab(a); renderJournal(a); renderDarwinTab(a); renderAnalyse(a);
+  renderHeat(a); renderMonthHeat(a);
+  lastA=a; renderBtCompare(a); renderStale();
+}
+
+function renderTop(a){
+  const ds=estimateDScore(a);
+  const cards=[
+    {lab:'DScore estimé',ico:'M12 2 4 7v6c0 5 8 9 8 9s8-4 8-9V7l-8-5Z',val:ds.score,cls:ds.score>=60?'pos':ds.score>=55?'warn':'',delta:ds.score>=60?'−40 % commissions':ds.score>=55?'−20 % commissions':'objectif 55'},
+    {lab:'Équité',ico:'M3 3v18h18',val:money(a.equity),delta:`Solde ${money(a.balance)}`},
+    {lab:'P&L réalisé',val:(a.realized>=0?'+':'')+money(a.realized),cls:a.realized>=0?'pos':'neg',delta:pct(a.retPct)+' du capital'},
+    {lab:'Drawdown actuel',val:pct(a.curDDpct),cls:a.curDDpct>=store.settings.ddWarn?'neg':a.curDDpct>=store.settings.ddWarn*0.6?'warn':'pos',delta:`max ${pct(a.maxDDpct)}`}
+  ];
+  document.getElementById('topStats').innerHTML=cards.map(c=>`
+    <div class="stat"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}">${c.val}</div><div class="delta">${c.delta||''}</div></div>`).join('');
+}
+
+function renderDD(a){
+  const max=store.settings.ddMax, warn=store.settings.ddWarn;
+  const fillPct=clamp(a.curDDpct/max*100,0,100);
+  const col=a.curDDpct>=warn?'var(--red)':a.curDDpct>=warn*0.6?'var(--amber)':'var(--green)';
+  const bar=document.querySelector('#ddBar > span'); bar.style.width=fillPct+'%'; bar.style.background=col;
+  document.getElementById('ddLine').style.left=clamp(warn/max*100,0,100)+'%';
+  document.getElementById('ddMetaL').textContent=`Actuel ${pct(a.curDDpct)} · alerte à ${pct(warn,1)}`;
+  document.getElementById('ddMetaR').textContent=`Marge avant max : ${pct(Math.max(max-a.curDDpct,0))}`;
+}
+
+function renderScore(a){
+  const ds=estimateDScore(a);
+  document.getElementById('dsNum').textContent=ds.score;
+  const ring=document.getElementById('dsRing'); const C=289; ring.style.strokeDashoffset=C*(1-ds.score/100);
+  ring.style.stroke=ds.score>=60?'var(--green)':ds.score>=55?'var(--amber)':'var(--accent)';
+  const tag=document.getElementById('dsTag'); tag.textContent=ds.score>=60?'excellent':ds.score>=55?'bon':'à construire';
+  tag.className='tag '+(ds.score>=60?'g':ds.score>=55?'a':'r');
+  document.getElementById('dsBreak').innerHTML=`
+    <div class="kpi-mini"><span>Rentabilité</span><span class="v">${ds.prof} / 45</span></div>
+    <div class="kpi-mini"><span>Maîtrise du drawdown</span><span class="v">${ds.dd} / 30</span></div>
+    <div class="kpi-mini"><span>Régularité</span><span class="v">${ds.cons} / 25</span></div>`;
+}
+
+function renderCalibration(a){
+  const tP=clamp(a.closed.length/25*100,0,100), dP=clamp(a.days/15*100,0,100);
+  document.getElementById('calTradesBar').style.width=tP+'%';
+  document.getElementById('calDaysBar').style.width=dP+'%';
+  document.getElementById('calTradesTxt').textContent=`${a.closed.length} / 25`;
+  document.getElementById('calDaysTxt').textContent=`${a.days} / 15`;
+  const done=a.closed.length>=25&&a.days>=15;
+  document.getElementById('calHelp').textContent=done?'✅ Conditions remplies — ton track record est suffisant pour créer/valider ton DARWIN.':`Encore ${Math.max(25-a.closed.length,0)} trade(s) et ${Math.max(15-a.days,0)} jour(s) pour finir la calibration.`;
+}
+
+function renderAdvice(a){
+  const tips=[]; const s=store.settings; const ds=estimateDScore(a);
+  if(a.curDDpct>=s.ddWarn) tips.push(['danger','Drawdown élevé',`Tu es à ${pct(a.curDDpct)}, au-delà de ton seuil d'alerte (${pct(s.ddWarn,1)}). Coupe ou allège le set le plus en perte.`]);
+  else if(a.curDDpct>=s.ddWarn*0.6) tips.push(['warn','Surveille le drawdown',`${pct(a.curDDpct)} de drawdown. Tu approches du seuil d'alerte (${pct(s.ddWarn,1)}).`]);
+  // worst set
+  const gs=Object.values(a.groups);
+  if(gs.length){ const worst=gs.slice().sort((x,y)=>(x.pl+x.floating)-(y.pl+y.floating))[0]; const tot=worst.pl+worst.floating; if(tot<0) tips.push(['warn','Set en perte',`« ${setLabel(worst.key)} » pèse ${money(tot)} sur ton compte. Vérifie ses paramètres ou réduis son lot.`]); }
+  // calibration
+  if(a.closed.length<25||a.days<15) tips.push(['info','Continue la calibration',`Il te manque ${Math.max(25-a.closed.length,0)} trade(s) et ${Math.max(15-a.days,0)} jour(s) pour valider ton DARWIN.`]);
+  // dscore
+  if(ds.score<55) tips.push(['info','Vise un DScore de 55',`Tu es à ${ds.score}. Plus de régularité et moins de drawdown te rapprochent du palier −20 % de commissions.`]);
+  else if(ds.score<60) tips.push(['ok','Presque au palier −40 %',`DScore ${ds.score}. À 60 tu débloques −40 % de commissions.`]);
+  if(a.floating<0) tips.push(['warn','Positions ouvertes en perte',`Tes ${a.open.length} position(s) ouverte(s) flottent à ${money(a.floating)}.`]);
+  if(!tips.length) tips.push(['ok','Tout est sous contrôle','Risque maîtrisé, courbe saine. Continue comme ça.']);
+  const ic={info:'M12 16v-4M12 8h.01" /><circle cx="12" cy="12" r="10"',ok:'M20 6 9 17l-5-5',warn:'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',danger:'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'};
+  document.getElementById('advice').innerHTML=tips.map(([t,h,b])=>`
+    <div class="alert ${t}"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="${ic[t]}"/></svg><div><b>${h}.</b> ${b}</div></div>`).join('');
+}
+
+function setHealth(g){ const tot=g.pl+g.floating; if(tot>0)return ['g','sain']; if(tot> -200)return ['a','neutre']; return ['r','en perte']; }
+function renderSets(a){
+  document.getElementById('riskTargetTxt').textContent=pct(store.settings.riskPct,2).replace('.',',');
+  const gs=Object.values(a.groups).sort((x,y)=>(y.pl+y.floating)-(x.pl+x.floating));
+  const grid=document.getElementById('setGrid');
+  if(!gs.length){grid.innerHTML='<div class="empty">Aucun set détecté pour l\'instant. Dès qu\'un trade apparaît dans le fichier, ses sets s\'afficheront ici.</div>';return;}
+  grid.innerHTML=gs.map(g=>{
+    const tot=g.pl+g.floating; const dd=setDD(g); const [cls,txt]=setHealth(g);
+    const syms=[...new Set(g.trades.map(t=>t.symbol))].join(', ');
+    return `<div class="setcard">
+      <div class="top">
+        <input class="setname" value="${setLabel(g.key).replace(/"/g,'&quot;')}" data-key="${g.key}">
+        <span class="tag ${cls}">${txt}</span>
+      </div>
+      <div class="setpl ${tot>=0?'pos':'neg'}">${tot>=0?'+':''}${money(tot)}</div>
+      <div class="chips">
+        <span class="chip">${syms||'—'}</span>
+        <span class="chip">${g.closed.length} clôturés</span>
+        ${g.open.length?`<span class="chip">${g.open.length} ouverts</span>`:''}
+        <span class="chip">DD ${pct(dd,1)}</span>
+        ${g.floating?`<span class="chip">flottant ${money(g.floating)}</span>`:''}
+      </div>
+    </div>`;}).join('');
+  grid.querySelectorAll('.setname').forEach(inp=>{inp.addEventListener('change',e=>{store.setNames[e.target.dataset.key]=e.target.value.trim();saveStore(store);render();});});
+}
+function setDD(g){ const c=g.closed.slice().filter(t=>t.closeTime).sort((a,b)=>a.closeTime-b.closeTime); let run=0,peak=0,mdd=0; c.forEach(t=>{run+=t.profit;if(run>peak)peak=run;const d=peak-run;if(d>mdd)mdd=d;}); const base=store.settings.balance||100000; return base>0?mdd/base*100:0; }
+
+function renderRiskTab(a){
+  const tb=document.querySelector('#riskTable tbody');
+  const gs=Object.values(a.groups);
+  const totalLoss=gs.reduce((s,g)=>s+Math.min(g.pl+g.floating,0),0);
+  if(!gs.length){tb.innerHTML='<tr><td colspan="6" class="empty">Aucune donnée.</td></tr>';return;}
+  tb.innerHTML=gs.sort((x,y)=>(x.pl+x.floating)-(y.pl+y.floating)).map(g=>{
+    const tot=g.pl+g.floating; const dd=setDD(g);
+    const share=totalLoss<0&&tot<0?Math.abs(tot/totalLoss*100):0;
+    const [cls,txt]=setHealth(g);
+    return `<tr><td>${setLabel(g.key)}</td><td>${g.closed.length}</td><td class="${tot<0?'neg':'pos'}">${money(tot)}</td><td>${pct(dd,1)}</td><td>${share?pct(share,0):'—'}</td><td><span class="tag ${cls}">${txt}</span></td></tr>`;
+  }).join('');
+}
+
+function renderJournal(a){
+  // stats
+  const cards=[
+    {lab:'Trades clôturés',val:a.closed.length},
+    {lab:'Win rate',val:pct(a.winRate,1),cls:a.winRate>=50?'pos':'warn'},
+    {lab:'Profit factor',val:a.pf===Infinity?'∞':fmt(a.pf,2),cls:a.pf>=1.3?'pos':a.pf>=1?'warn':'neg'},
+    {lab:'Gains / Pertes',val:`${a.wins} / ${a.losses}`}
+  ];
+  document.getElementById('journalStats').innerHTML=cards.map(c=>`<div class="stat"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}">${c.val}</div></div>`).join('');
+  // trades table
+  const tb=document.querySelector('#tradesTable tbody');
+  const rows=a.closed.slice().sort((x,y)=>(y.closeTime||0)-(x.closeTime||0));
+  tb.innerHTML=rows.length?rows.map((t,i)=>`<tr><td>${i+1}</td><td>${setLabel(setKey(t))}</td><td>${t.symbol}</td><td>${t.dir||'—'}</td><td>${fmt(t.lots,2)}</td><td>${t.closeTime?t.closeTime.toLocaleString('fr-FR'):'—'}</td><td class="${t.profit>=0?'pos':'neg'}">${t.profit>=0?'+':''}${money(t.profit)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Aucun trade clôturé pour l\'instant.</td></tr>';
+  // chart
+  let pts=a.curve, src='(depuis les trades clôturés)';
+  if(pts.length<=1 && store.equitySnaps.length>1){ pts=store.equitySnaps.map(s=>({x:new Date(s.t),y:s.eq,label:new Date(s.t).toLocaleString('fr-FR')})); src='(depuis les relevés automatiques)'; }
+  document.getElementById('curveSrc').textContent=pts.length>1?src:'';
+  drawChart(pts);
+}
+
+function drawChart(pts){
+  const ctx=document.getElementById('equityChart'); if(!ctx)return;
+  const labels=pts.map((p,i)=>p.label||('#'+i)); const data=pts.map(p=>Math.round(p.y));
+  if(chart)chart.destroy();
+  chart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data,borderColor:'#7c6df2',backgroundColor:'rgba(124,109,242,.12)',fill:true,tension:.25,pointRadius:pts.length>40?0:3,pointBackgroundColor:'#7c6df2',borderWidth:2}]},
+    options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y.toLocaleString('fr-FR')+' $'}}},
+      scales:{x:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',maxTicksLimit:8}},y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',callback:v=>v.toLocaleString('fr-FR')}}}}});
+}
+
+/* ---------- Darwinex tab: consistance risque, corrélation, DarwinIA ---------- */
+function contractValue(sym, price){
+  const s=(sym||'').toUpperCase();
+  if(s.includes('XAU')) return 100;         // 1 lot = 100 oz
+  if(s.includes('XAG')) return 5000;        // 1 lot = 5000 oz
+  if(s.includes('JPY')) return 100000/(price||1); // paires cotées en JPY
+  if(/(US30|DJ30|WS30|DOW|DJI)/.test(s)) return 1;
+  if(/(NAS100|NDX|USTEC|US100)/.test(s)) return 1;
+  if(/(SPX|US500|SP500)/.test(s)) return 1;
+  if(/(GER|DE40|DAX|UK100|FRA40|JP225|NIKKEI|US2000)/.test(s)) return 1;
+  if(store.settings.pointValues && store.settings.pointValues[s]!==undefined) return store.settings.pointValues[s];
+  if(/^[A-Z]{6}$/.test(s)) return 100000;   // forex standard (quote USD)
+  return null;
+}
+// Valeur du point déduite des trades clôturés (exacte, par symbole/broker) ; sinon table générique.
+function buildCvMap(closed){
+  const byS={};
+  (closed||[]).forEach(t=>{
+    if(t.closePrice==null||t.openPrice==null||!t.lots||t.gross==null) return;
+    const move = t.dir==='sell' ? (t.openPrice-t.closePrice) : (t.closePrice-t.openPrice);
+    if(Math.abs(move)<1e-9) return;
+    const cv=t.gross/(move*t.lots);
+    if(isFinite(cv)&&cv>0) (byS[t.symbol]=byS[t.symbol]||[]).push(cv);
+  });
+  const map={};
+  Object.keys(byS).forEach(s=>{ const arr=byS[s].sort((a,b)=>a-b); map[s]=arr[Math.floor(arr.length/2)]; }); // médiane
+  return map;
+}
+function tradeRisk(t, balance){
+  if(t.sl==null||t.openPrice==null||!t.lots) return null;
+  const cv=(cvMap&&cvMap[t.symbol]) || contractValue(t.symbol, t.closePrice||t.openPrice);
+  if(cv==null||!isFinite(cv)) return null;
+  const usd=Math.abs(t.openPrice - t.sl)*t.lots*cv;
+  return {usd, pct: balance>0?usd/balance*100:0};
+}
+
+function renderDarwinTab(a){ const c=computeCorr(a); renderRiskConsistency(a); renderCorrelation(a,c); renderDarwinIA(a,c); }
+
+function renderRiskConsistency(a){
+  const target=store.settings.riskPct||0.1;
+  const withRisk=[];
+  a.trades.forEach(t=>{const r=tradeRisk(t,a.balance); if(r) withRisk.push({t,r});});
+  const tb=document.querySelector('#riskConsTable tbody');
+  const tag=document.getElementById('riskConsTag');
+  if(!withRisk.length){
+    tb.innerHTML='<tr><td colspan="7" class="empty">Risque non calculable (SL ou prix manquant sur les trades).</td></tr>';
+    document.getElementById('riskConsScore').textContent='—';
+    document.getElementById('riskConsStats').innerHTML='';
+    tag.textContent='—'; tag.className='tag a';
+    document.querySelector('#riskConsBar').style.width='0%'; return;
+  }
+  const pcts=withRisk.map(x=>x.r.pct);
+  const mean=pcts.reduce((s,v)=>s+v,0)/pcts.length;
+  const sd=Math.sqrt(pcts.reduce((s,v)=>s+(v-mean)*(v-mean),0)/pcts.length);
+  const cv=mean>0?sd/mean:0;
+  const withinTol=pcts.filter(p=>Math.abs(p-target)<=target*0.3).length;
+  const consScore=clamp(Math.round(100-cv*120),0,100);
+  document.getElementById('riskConsStats').innerHTML=[
+    {lab:'Risque moyen / trade',val:pct(mean,3)},
+    {lab:'Cible',val:pct(target,2)},
+    {lab:'Trades dans la cible (±30 %)',val:withinTol+' / '+pcts.length}
+  ].map(c=>`<div class="stat" style="background:var(--panel2)"><div class="lab">${c.lab}</div><div class="val" style="font-size:19px">${c.val}</div></div>`).join('');
+  const bar=document.querySelector('#riskConsBar'); bar.style.width=consScore+'%'; bar.style.background=consScore>=75?'var(--green)':consScore>=50?'var(--amber)':'var(--red)';
+  document.getElementById('riskConsScore').textContent='Score '+consScore+'/100';
+  tag.textContent=consScore>=75?'régulier':consScore>=50?'variable':'irrégulier'; tag.className='tag '+(consScore>=75?'g':consScore>=50?'a':'r');
+  tb.innerHTML=withRisk.sort((x,y)=>(y.t.closeTime||0)-(x.t.closeTime||0)).map(({t,r})=>{
+    const dev=r.pct-target; const cls=Math.abs(dev)<=target*0.3?'pos':Math.abs(dev)<=target*0.6?'warn':'neg';
+    const arrow=dev>0.0005?'▲':dev<-0.0005?'▼':'●';
+    return `<tr><td>${t.closeTime?t.closeTime.toLocaleDateString('fr-FR'):'ouvert'}</td><td>${setLabel(setKey(t))}</td><td>${t.symbol}</td><td>${fmt(t.lots,2)}</td><td>${fmt(r.usd,2)} $</td><td>${pct(r.pct,3)}</td><td class="${cls}">${arrow} ${pct(Math.abs(dev),3)}</td></tr>`;
+  }).join('');
+}
+
+function computeCorr(a){
+  const keys=Object.keys(a.groups);
+  const dates=[...new Set(a.closed.filter(t=>t.closeTime).map(t=>t.closeTime.toISOString().slice(0,10)))].sort();
+  const dayMap={}; keys.forEach(k=>dayMap[k]={});
+  a.closed.forEach(t=>{if(!t.closeTime)return;const k=setKey(t);const d=t.closeTime.toISOString().slice(0,10);dayMap[k][d]=(dayMap[k][d]||0)+t.profit;});
+  const series=k=>dates.map(d=>dayMap[k][d]||0);
+  const corr=(x,y)=>{const n=x.length;if(n<2)return null;const mx=x.reduce((s,v)=>s+v,0)/n,my=y.reduce((s,v)=>s+v,0)/n;let sxy=0,sx=0,sy=0;for(let i=0;i<n;i++){const dx=x[i]-mx,dy=y[i]-my;sxy+=dx*dy;sx+=dx*dx;sy+=dy*dy;}if(sx===0||sy===0)return null;return sxy/Math.sqrt(sx*sy);};
+  const M={}; let maxCorr=null;
+  keys.forEach(k1=>{M[k1]={};keys.forEach(k2=>{const c=k1===k2?1:corr(series(k1),series(k2));M[k1][k2]=c;if(k1!==k2&&c!==null)maxCorr=(maxCorr===null)?c:Math.max(maxCorr,c);});});
+  const overlaps=[];
+  for(let i=0;i<keys.length;i++)for(let j=i+1;j<keys.length;j++){
+    const s1=new Set(a.groups[keys[i]].trades.map(t=>t.symbol));
+    const s2=new Set(a.groups[keys[j]].trades.map(t=>t.symbol));
+    const common=[...s1].filter(s=>s2.has(s));
+    if(common.length) overlaps.push([keys[i],keys[j],common]);
+  }
+  return {keys,dates,M,maxCorr,overlaps};
+}
+
+function renderCorrelation(a,c){
+  const el=document.getElementById('corrMatrix');
+  if(c.keys.length<2){el.innerHTML='<div class="empty">Il faut au moins 2 sets ayant tradé pour calculer une corrélation.</div>';return;}
+  let html='<div style="overflow:auto"><table style="text-align:center;font-size:13px"><thead><tr><th></th>'+c.keys.map(k=>`<th style="text-align:center">${setLabel(k)}</th>`).join('')+'</tr></thead><tbody>';
+  c.keys.forEach(k1=>{
+    html+='<tr><td style="text-align:left;font-weight:500">'+setLabel(k1)+'</td>';
+    c.keys.forEach(k2=>{
+      const v=c.M[k1][k2]; let cell,bg='var(--panel2)',col='var(--muted)';
+      if(v===null)cell='—';
+      else{cell=v.toFixed(2); if(k1!==k2){ if(v>=0.6){bg='var(--red-soft)';col='#ff9b95';} else if(v>=0.3){bg='var(--amber-soft)';col='#f0cd6e';} else if(v<=-0.3){bg='var(--blue-soft)';col='#9cc7ff';} else{bg='var(--green-soft)';col='#7ee2a0';}}}
+      html+=`<td style="background:${bg};color:${col};font-weight:500;min-width:62px">${cell}</td>`;
+    });
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+  let notes='';
+  if(c.overlaps.length) notes+='<div class="alert warn" style="margin-top:10px"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div>'+c.overlaps.map(o=>`« ${setLabel(o[0])} » et « ${setLabel(o[1])} » tradent le même symbole (${o[2].join(', ')}) — risque de redondance.`).join('<br>')+'</div></div>';
+  if(c.dates.length<3) notes+='<div class="help" style="margin-top:8px">⚠ Seulement '+c.dates.length+' jour(s) commun(s) — la corrélation se fiabilisera avec plus de trades.</div>';
+  el.innerHTML=html+notes;
+}
+
+function renderDarwinIA(a,c){
+  const byMonth={}; a.closed.forEach(t=>{if(!t.closeTime)return;const m=t.closeTime.toISOString().slice(0,7);byMonth[m]=(byMonth[m]||0)+t.profit;});
+  const months=Object.keys(byMonth).sort();
+  const nowM=new Date().toISOString().slice(0,7);
+  const dep=a.dep||100000;
+  const monthRet=(byMonth[nowM]||0)/dep*100;
+  const cum5=months.slice(-5).reduce((s,m)=>s+byMonth[m],0)/dep*100;
+  const dd6=a.max_dd_pct||a.maxDDpct||0;
+  const rating=Math.round(clamp(50 + clamp(cum5*4,-20,30) + clamp(monthRet*2,-10,12) - clamp(dd6*2,0,25),0,100));
+  document.getElementById('diaNum').textContent=rating;
+  const ring=document.getElementById('diaRing'); ring.style.strokeDashoffset=289*(1-rating/100); ring.style.stroke=rating>=75?'var(--green)':rating>=60?'var(--amber)':'var(--accent)';
+  document.getElementById('diaBreak').innerHTML=`
+    <div class="kpi-mini"><span>Rendement du mois</span><span class="v ${monthRet>=0?'pos':'neg'}">${pct(monthRet,2)}</span></div>
+    <div class="kpi-mini"><span>Cumul 5 mois glissants</span><span class="v ${cum5>=0?'pos':'neg'}">${pct(cum5,2)}</span></div>
+    <div class="kpi-mini"><span>Drawdown max (6 mois)</span><span class="v">${pct(dd6,2)}</span></div>`;
+  const bar=document.getElementById('diaBar'); bar.style.width=rating+'%'; bar.style.background=rating>=75?'var(--green)':rating>=60?'var(--amber)':'var(--accent)';
+  document.getElementById('diaMetaL').textContent = rating>=75?'✅ dans la zone d\'allocation':('encore ~'+Math.max(75-rating,0)+' pts pour viser l\'allocation');
+  const items=[
+    ['DARWIN créé (25 trades & 15 jours)', a.closed.length>=25 && a.days>=15],
+    ['Actif ce mois-ci', (byMonth[nowM]||0)!==0 || a.open.length>0],
+    ['Équité ≥ 1 000 $', a.equity>=1000],
+    ['Corrélation < 0,95 entre sets', c.maxCorr===null || c.dates.length<5 || c.maxCorr<0.95]
+  ];
+  document.getElementById('diaChecklist').innerHTML=items.map(([t,ok])=>`<div class="kpi-mini"><span>${t}</span><span class="v">${ok?'<span class="pos">✔ ok</span>':'<span class="warn">à faire</span>'}</span></div>`).join('');
+}
+
+/* ---------- Analyse tab: espérance/R, symboles, sessions, heures ---------- */
+function renderAnalyse(a){
+  const closed=a.closed;
+  const rByTrade=new Map(); const Rs=[];
+  closed.forEach(t=>{const r=tradeRisk(t,a.balance); if(r&&r.usd>0){const R=t.profit/r.usd; Rs.push(R); rByTrade.set(t,R);}});
+  const wins=closed.filter(t=>t.profit>0), losses=closed.filter(t=>t.profit<0);
+  const winRate=closed.length?wins.length/closed.length*100:0;
+  const expR=Rs.length?Rs.reduce((s,v)=>s+v,0)/Rs.length:null;
+  const expUsd=closed.length?closed.reduce((s,t)=>s+t.profit,0)/closed.length:0;
+  const winR=[...rByTrade].filter(([t])=>t.profit>0).map(([,R])=>R);
+  const lossR=[...rByTrade].filter(([t])=>t.profit<0).map(([,R])=>R);
+  const aw=winR.length?winR.reduce((s,v)=>s+v,0)/winR.length:0;
+  const al=lossR.length?lossR.reduce((s,v)=>s+v,0)/lossR.length:0;
+  document.getElementById('expStats').innerHTML=[
+    {lab:'Espérance / trade',val:expR===null?'—':(expR>=0?'+':'')+fmt(expR,2)+' R',cls:expR>=0?'pos':'neg'},
+    {lab:'Espérance / trade ($)',val:(expUsd>=0?'+':'')+money(expUsd),cls:expUsd>=0?'pos':'neg'},
+    {lab:'Gain moyen',val:'+'+fmt(aw,2)+' R',cls:'pos'},
+    {lab:'Perte moyenne',val:fmt(al,2)+' R',cls:'neg'}
+  ].map(c=>`<div class="stat"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}">${c.val}</div></div>`).join('');
+  const tag=document.getElementById('expTag');
+  if(expR===null){tag.textContent='—';tag.className='tag a';}
+  else{tag.textContent=expR>=0.1?'positive':expR>=0?'fragile':'négative';tag.className='tag '+(expR>=0.1?'g':expR>=0?'a':'r');}
+  document.getElementById('expBreak').innerHTML=`
+    <div class="kpi-mini"><span>Espérance mathématique</span><span class="v ${expR>=0?'pos':'neg'}">${expR===null?'—':(expR>=0?'+':'')+fmt(expR,2)+' R'}</span></div>
+    <div class="kpi-mini"><span>Ratio gain/perte moyen</span><span class="v">${al!==0?fmt(Math.abs(aw/al),2):'—'} : 1</span></div>
+    <div class="kpi-mini"><span>Taux de réussite</span><span class="v">${pct(winRate,1)}</span></div>
+    <div class="kpi-mini"><span>Trades avec R mesuré</span><span class="v">${Rs.length} / ${closed.length}</span></div>`;
+  // sessions (heure serveur)
+  const sess={'Asie':{n:0,pl:0,w:0},'Londres':{n:0,pl:0,w:0},'New York':{n:0,pl:0,w:0}};
+  closed.forEach(t=>{const h=t.openHour; if(h==null)return; const s=h<8?'Asie':h<16?'Londres':'New York'; sess[s].n++;sess[s].pl+=t.profit;if(t.profit>0)sess[s].w++;});
+  const st=document.querySelector('#sessTable tbody');
+  const sessRows=Object.entries(sess).filter(([,g])=>g.n>0);
+  st.innerHTML=sessRows.length?sessRows.map(([name,g])=>`<tr><td>${name}</td><td>${g.n}</td><td class="${g.pl>=0?'pos':'neg'}">${g.pl>=0?'+':''}${money(g.pl)}</td><td>${pct(g.w/g.n*100,0)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Heure d\'ouverture indisponible.</td></tr>';
+  // par symbole
+  const bySym={};
+  closed.forEach(t=>{const k=t.symbol;const g=bySym[k]||(bySym[k]={n:0,pl:0,w:0,rSum:0,rN:0});g.n++;g.pl+=t.profit;if(t.profit>0)g.w++;const R=rByTrade.get(t);if(R!==undefined){g.rSum+=R;g.rN++;}});
+  const syt=document.querySelector('#symTable tbody');
+  const symRows=Object.entries(bySym).sort((x,y)=>y[1].pl-x[1].pl);
+  syt.innerHTML=symRows.length?symRows.map(([k,g])=>{const rM=g.rN?g.rSum/g.rN:null;const exU=g.pl/g.n;return `<tr><td>${k}</td><td>${g.n}</td><td class="${g.pl>=0?'pos':'neg'}">${g.pl>=0?'+':''}${money(g.pl)}</td><td>${pct(g.w/g.n*100,0)}</td><td class="${rM>=0?'pos':'neg'}">${rM===null?'—':(rM>=0?'+':'')+fmt(rM,2)+' R'}</td><td class="${exU>=0?'pos':'neg'}">${(exU>=0?'+':'')+money(exU)}</td></tr>`;}).join(''):'<tr><td colspan="6" class="empty">Aucune donnée.</td></tr>';
+  // histogramme par heure d'ouverture
+  const hours=new Array(24).fill(0), hoursN=new Array(24).fill(0);
+  closed.forEach(t=>{if(t.openHour==null)return;hours[t.openHour]+=t.profit;hoursN[t.openHour]++;});
+  const maxAbs=Math.max(1,...hours.map(v=>Math.abs(v)));
+  const hb=document.getElementById('hourBars'), ha=document.getElementById('hourAxis');
+  const half=v=>Math.min(Math.abs(v)/maxAbs*100,100);
+  hb.innerHTML='<div style="position:absolute;left:0;right:0;top:50%;height:1px;background:var(--border);z-index:0"></div>'+
+    hours.map((v,h)=>{
+      const pos=v>0?`<div style="height:${Math.max(half(v),3)}%;width:70%;background:var(--green);border-radius:3px 3px 0 0"></div>`:'';
+      const neg=v<0?`<div style="height:${Math.max(half(v),3)}%;width:70%;background:var(--red);border-radius:0 0 3px 3px"></div>`:'';
+      return `<div title="${h}h : ${fmt(v,2)} $ (${hoursN[h]} trades)" style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;z-index:1">`+
+        `<div style="flex:1;display:flex;align-items:flex-end;justify-content:center;width:100%">${pos}</div>`+
+        `<div style="flex:1;display:flex;align-items:flex-start;justify-content:center;width:100%">${neg}</div></div>`;
+    }).join('');
+  ha.innerHTML=hours.map((v,h)=>`<div style="flex:1;text-align:center;font-size:9px;color:var(--dim)">${h%3===0?h:''}</div>`).join('');
+}
+
+/* ---------- Backtests tab: import MT5, courbes, portefeuille combiné, comparaison live ---------- */
+store.backtests = store.backtests || [];
+const round2=n=>Math.round(n*100)/100;
+
+function btNum(s){ if(s==null)return null; s=(''+s).replace(/\s| | /g,'').replace(/[€$]/g,''); if(s.indexOf(',')>=0&&s.indexOf('.')>=0)s=s.replace(/,/g,''); else if(s.indexOf(',')>=0)s=s.replace(',','.'); const n=parseFloat(s); return isNaN(n)?null:n; }
+
+function btParseSummary(doc){
+  const cells=Array.from(doc.querySelectorAll('td,th'));
+  const findVal=labels=>{ for(const lbl0 of labels){ const lbl=lbl0.toLowerCase(); const cell=cells.find(td=>{const t=td.textContent.trim().toLowerCase();return t===lbl||t.startsWith(lbl);}); if(cell){ const nxt=cell.nextElementSibling; if(nxt&&nxt.textContent.trim())return nxt.textContent.trim(); const par=cell.parentElement; if(par){const sibs=Array.from(par.children);const idx=sibs.indexOf(cell);for(let j=idx+1;j<sibs.length;j++)if(sibs[j].textContent.trim())return sibs[j].textContent.trim();} } } return null; };
+  return { deposit:btNum(findVal(['Initial deposit:','Dépôt initial:','Initial Deposit'])), net:btNum(findVal(['Total net profit:','Total Net Profit','Bénéfice net total:','Profit net:'])), symbol:findVal(['Symbol:','Symbole:','Instrument:']), period:findVal(['Period:','Période:'])||'' };
+}
+
+function btParseTrades(doc){
+  const tables=Array.from(doc.querySelectorAll('table'));
+  for(const table of tables){
+    const rows=Array.from(table.querySelectorAll('tr'));
+    let hIdx=-1, headers=null;
+    for(let i=0;i<rows.length;i++){ const cells=Array.from(rows[i].querySelectorAll('td,th')).map(c=>c.textContent.trim().toLowerCase()); const joined=cells.join('|'); if(joined.indexOf('profit')>=0&&(joined.indexOf('symbol')>=0||joined.indexOf('symbole')>=0||joined.indexOf('type')>=0)){hIdx=i;headers=cells;break;} }
+    if(hIdx<0)continue;
+    let idxProfit=-1,idxType=-1,idxSwap=-1,idxComm=-1,idxSym=-1,idxDir=-1;
+    headers.forEach((h,j)=>{ if(h.indexOf('profit')>=0)idxProfit=j; if(h==='type')idxType=j; if(h.indexOf('swap')>=0||h.indexOf('echange')>=0)idxSwap=j; if(h.indexOf('commission')>=0)idxComm=j; if(h==='symbol'||h==='symbole')idxSym=j; if(h.indexOf('direction')>=0)idxDir=j; });
+    if(idxProfit<0)continue;
+    const trades=[]; let deposit=null; const symCount={};
+    for(let r=hIdx+1;r<rows.length;r++){
+      const tds=Array.from(rows[r].querySelectorAll('td,th')); if(!tds.length)continue;
+      const txt=tds.map(c=>c.textContent.trim());
+      const type=idxType>=0?(txt[idxType]||'').toLowerCase():'';
+      const dir=idxDir>=0?(txt[idxDir]||'').toLowerCase():'';
+      const profit=btNum(txt[idxProfit]);
+      if(type.indexOf('balance')>=0||type.indexOf('credit')>=0||type.indexOf('dépôt')>=0){ if(profit!=null&&profit>0&&deposit==null)deposit=profit; continue; }
+      if(profit==null)continue;
+      const isTrade=type==='buy'||type==='sell'||type.indexOf('buy')>=0||type.indexOf('sell')>=0;
+      if(idxType>=0&&!isTrade)continue;
+      let date=null; for(let k=txt.length-1;k>=0;k--){const dm=txt[k].match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);if(dm){date=new Date(+dm[1],+dm[2]-1,+dm[3]);break;}}
+      if(idxType<0&&!date)continue;
+      const swap=idxSwap>=0?(btNum(txt[idxSwap])||0):0;
+      const comm=idxComm>=0?(btNum(txt[idxComm])||0):0;
+      // deal de clôture (MT5 "out"/"inout") = position fermée. Les "in" gardent leur P&L (commission d'entrée) mais ne comptent pas comme trade.
+      const isClose = idxDir<0 || dir!=='in';
+      if(idxSym>=0 && isClose){const sy=(txt[idxSym]||'').trim();if(sy)symCount[sy]=(symCount[sy]||0)+1;}
+      trades.push({profit:profit+swap+comm,date,isClose});
+    }
+    if(trades.length){ let dom=null,mx=0;Object.keys(symCount).forEach(k=>{if(symCount[k]>mx){mx=symCount[k];dom=k;}}); return {trades,deposit,symbol:dom}; }
+  }
+  return null;
+}
+
+function btCompute(trades, deposit){
+  const dated=trades.filter(t=>t.date).sort((a,b)=>a.date-b.date);
+  const dep=deposit||10000;
+  let net=0,gp=0,gl=0,wins=0,nClose=0,eq=dep,peak=dep,ddPct=0; const days={}, monthly={};
+  dated.forEach(t=>{ net+=t.profit; eq+=t.profit; if(eq>peak)peak=eq; const dd=peak>0?(peak-eq)/peak*100:0; if(dd>ddPct)ddPct=dd;
+    const dk=t.date.getFullYear()+'-'+String(t.date.getMonth()+1).padStart(2,'0')+'-'+String(t.date.getDate()).padStart(2,'0'); days[dk]=(days[dk]||0)+t.profit;
+    const mk=t.date.getFullYear()+'-'+String(t.date.getMonth()+1).padStart(2,'0'); monthly[mk]=(monthly[mk]||0)+t.profit;
+    if(t.isClose){ nClose++; if(t.profit>=0){gp+=t.profit;if(t.profit>0)wins++;}else{gl+=t.profit;} } });
+  const n=nClose;
+  const months=Object.keys(monthly); const posM=months.filter(k=>monthly[k]>0).length;
+  return { deposit:dep, net, pf:gl!==0?gp/Math.abs(gl):null, winRate:n?wins/n*100:0, maxDDpct:ddPct, nbTrades:n, months:months.length, moisPositifs:months.length?posM/months.length*100:0, rendementNet:net/dep*100, days:Object.entries(days).sort((a,b)=>a[0]<b[0]?-1:1) };
+}
+
+function btImportFile(file){
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const bytes=new Uint8Array(reader.result); let html;
+      if(bytes[0]===0xFF&&bytes[1]===0xFE) html=new TextDecoder('utf-16le').decode(bytes);
+      else if(bytes[0]===0xFE&&bytes[1]===0xFF) html=new TextDecoder('utf-16be').decode(bytes);
+      else html=new TextDecoder('utf-8').decode(bytes);
+      const doc=new DOMParser().parseFromString(html,'text/html');
+      const sum=btParseSummary(doc); const tr=btParseTrades(doc);
+      if(!tr||!tr.trades.length){ alert('Aucune table de trades reconnue dans « '+file.name+' ». Vérifie que c\'est bien un rapport MT5.'); return; }
+      const c=btCompute(tr.trades, sum.deposit||tr.deposit);
+      const sig=c.nbTrades+'|'+Math.round(c.net)+'|'+(c.days[0]?c.days[0][0]:'');
+      const entry={ id:'bt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), name:(file.name.replace(/\.html?$/i,'')||sum.symbol||tr.symbol), sig, deposit:c.deposit, riskPct:1, included:true, symbol:sum.symbol||tr.symbol||'', period:sum.period||'', days:c.days, stats:{net:c.net,pf:c.pf,winRate:c.winRate,maxDDpct:c.maxDDpct,nbTrades:c.nbTrades,months:c.months,moisPositifs:c.moisPositifs,rendementNet:c.rendementNet} };
+      const ix=store.backtests.findIndex(b=>b.sig&&b.sig===sig);
+      if(ix>=0){ entry.included=store.backtests[ix].included; store.backtests[ix]=entry; }  // ré-import : remplace, pas de doublon
+      else store.backtests.push(entry);
+      saveStore(store); renderBacktests(lastA);
+    }catch(e){ console.error(e); alert('Erreur de lecture de '+file.name); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function makeLineChart(cv, labels, datasets, unit){
+  if(cv._chart)cv._chart.destroy();
+  cv._chart=new Chart(cv,{type:'line',data:{labels,datasets},options:{plugins:{legend:{display:datasets.length>1,labels:{color:'#8b95a5',boxWidth:12}},tooltip:{callbacks:{label:c=>c.dataset.label?`${c.dataset.label}: ${c.parsed.y}${unit||''}`:`${c.parsed.y}${unit||''}`}}},scales:{x:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',maxTicksLimit:8}},y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',callback:v=>v+(unit||'')}}}}});
+}
+function btCumul(days, deposit){ let run=0; const L=[],D=[]; days.forEach(([d,pnl])=>{run+=pnl/deposit*100; L.push(d); D.push(round2(run));}); return {L,D}; }
+
+// Détecte le magic du set live correspondant à un backtest, d'après son nom.
+function autoMagic(name){
+  const n=(name||'').toLowerCase();
+  if(/\bslot\s*1\b/.test(n)) return 23615;
+  if(/\bslot\s*2\b/.test(n)) return 15150;
+  if(/\bslot\s*3\b/.test(n)) return 36381;
+  if(/\bslot\s*4\b/.test(n)) return 27788;
+  if(/\bslot\s*5\b/.test(n)) return 44650;
+  if(/\bslot\s*6\b/.test(n)) return 20567;
+  if(/\bslot\s*8\b/.test(n)) return 33940;
+  if(/eurusd/.test(n)&&/swing/.test(n)) return 1;
+  if(/usdjpy/.test(n)&&/swing/.test(n)) return 2;
+  if(/gold\s*2h/.test(n)||/\b2000\b/.test(n)) return 3;
+  if(/gold\s*8h/.test(n)||/\b2001\b/.test(n)) return 4;
+  if(/sweep/.test(n)||/gold\s*london/.test(n)) return 5;
+  if(/gdaxi/.test(n)||/\bdax\b/.test(n)) return 6;
+  return null;
+}
+function renderBacktests(a){
+  const list=document.getElementById('btList'); const bts=store.backtests;
+  const tb=document.getElementById('btToolbar'); const cnt=document.getElementById('btCount');
+  if(!bts.length){
+    list.innerHTML='<div class="empty">Aucun backtest importé. Glisse tes rapports HTML ci-dessus.</div>';
+    document.getElementById('btComboCard').style.display='none'; document.getElementById('btAllCard').style.display='none';
+    const wrapE=document.getElementById('btListWrap'); if(wrapE) wrapE.style.display='none';
+    if(tb) tb.style.display='none';
+    ['btAllChart','btComboChart'].forEach(id=>{const c=document.getElementById(id); if(c&&c._chart){c._chart.destroy();c._chart=null;}});
+    renderBtCompare(a); return;
+  }
+  const wrap=document.getElementById('btListWrap'); if(wrap) wrap.style.display='block';
+  if(tb){ tb.style.display='flex'; cnt.textContent=bts.length+' backtest'+(bts.length>1?'s':'')+' importé'+(bts.length>1?'s':''); }
+  const liveDD={};
+  if(a&&a.groups){ Object.keys(a.groups).forEach(k=>{ if(k.indexOf('magic:')===0) liveDD[k.slice(6)]={dd:setDD(a.groups[k]),n:a.groups[k].closed.length}; }); }
+  list.innerHTML=bts.map(b=>{ const s=b.stats; const inc=b.included!==false; return `<div class="card" style="margin-bottom:10px;${inc?'':'opacity:.5'}">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+        <label title="Inclure dans le portefeuille combiné" style="display:flex;align-items:center;gap:6px;margin:0;font-size:12px;color:var(--muted);white-space:nowrap;cursor:pointer">
+          <input type="checkbox" data-inc="${b.id}" ${inc?'checked':''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">portefeuille</label>
+        <input class="setname" value="${(b.name||'').replace(/"/g,'&quot;')}" title="${(b.name||'').replace(/"/g,'&quot;')}" data-id="${b.id}" style="flex:1;min-width:0;width:auto">
+      </div>
+      <button class="ghost sm" data-del="${b.id}">✕ retirer</button></div>
+    <div class="grid g4" style="margin-top:10px">
+      <div class="stat" style="background:var(--panel2)"><div class="lab">Rendement (1 %)</div><div class="val ${s.rendementNet>=0?'pos':'neg'}" style="font-size:18px">${pct(s.rendementNet,1)}</div></div>
+      <div class="stat" style="background:var(--panel2)"><div class="lab">Drawdown max</div><div class="val" style="font-size:18px">${pct(s.maxDDpct,1)}</div></div>
+      <div class="stat" style="background:var(--panel2)"><div class="lab">Profit factor</div><div class="val" style="font-size:18px">${s.pf==null?'—':fmt(s.pf,2)}</div></div>
+      <div class="stat" style="background:var(--panel2)"><div class="lab">Trades</div><div class="val" style="font-size:18px">${s.nbTrades}</div></div>
+    </div>
+    ${(function(){
+      const mg=(b.magic!=null&&b.magic!=='')?String(b.magic):(autoMagic(b.name)||'');
+      const btDD10=(s.maxDDpct||0)/10;
+      let cmp;
+      if(!mg){ cmp='<span style="color:var(--dim)">renseigne le magic du set live pour comparer le drawdown</span>'; }
+      else if(!liveDD[mg]||!liveDD[mg].n){ cmp='DD réel : <b>—</b> <span style="color:var(--dim)">(pas encore de trade live)</span> &nbsp;·&nbsp; réf. backtest ÷10 : <b>'+pct(btDD10,2)+'</b>'; }
+      else { const ld=liveDD[mg].dd, over=ld>btDD10; cmp='DD réel (0,1 %) : <b class="'+(over?'neg':'pos')+'">'+pct(ld,2)+'</b> &nbsp;·&nbsp; réf. backtest ÷10 : <b>'+pct(btDD10,2)+'</b> &nbsp;·&nbsp; '+(over?'🔴 dépasse la réf.':'🟢 sous la réf.'); }
+      return '<div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;font-size:12.5px"><label style="font-size:12px;color:var(--muted);margin:0">Set live (magic) :</label><input type="number" class="bt-magic" data-id="'+b.id+'" value="'+mg+'" placeholder="—" style="width:88px;padding:5px 8px"><span style="flex:1;min-width:220px">'+cmp+'</span></div>';
+    })()}
+    <div class="help" style="margin-top:10px">${b.symbol||''}${b.period?(' · '+b.period):''} · dépôt ${money(b.deposit)} · ${s.months} mois · ${fmt(s.winRate,1)} % réussite</div>
+  </div>`; }).join('');
+  list.querySelectorAll('.setname').forEach(inp=>inp.addEventListener('change',e=>{const b=store.backtests.find(x=>x.id===e.target.dataset.id);if(b){b.name=e.target.value.trim();saveStore(store);renderBacktests(lastA);}}));
+  list.querySelectorAll('[data-inc]').forEach(cb=>cb.addEventListener('change',e=>{const b=store.backtests.find(x=>x.id===e.target.dataset.inc);if(b){b.included=e.target.checked;saveStore(store);renderBacktests(lastA);}}));
+  list.querySelectorAll('[data-del]').forEach(btn=>btn.addEventListener('click',e=>{store.backtests=store.backtests.filter(x=>x.id!==e.target.dataset.del);saveStore(store);renderBacktests(lastA);}));
+  list.querySelectorAll('.bt-magic').forEach(inp=>inp.addEventListener('change',e=>{const b=store.backtests.find(x=>x.id===e.target.dataset.id);if(b){const v=e.target.value.trim();b.magic=v===''?null:v;saveStore(store);renderBacktests(lastA);}}));
+  renderBtAll(); renderBtCombo(); renderBtCompare(a);
+}
+
+const BT_COLORS=['#7c6df2','#388bfd','#2ea043','#d29922','#f85149','#1d9e75','#d4537e','#85b7eb','#ef9f27','#c0dd97','#e24b4a','#5dcaa5'];
+function renderBtAll(){
+  const cv=document.getElementById('btAllChart'); const card=document.getElementById('btAllCard'); const bts=store.backtests;
+  if(!bts.length){card.style.display='none';return;} card.style.display='';
+  const allDates=[...new Set(bts.flatMap(b=>b.days.map(d=>d[0])))].sort();
+  const datasets=bts.map((b,i)=>{
+    const cum={}; let run=0; b.days.forEach(([d,pnl])=>{run+=pnl/b.deposit*100;cum[d]=round2(run);});
+    const first=b.days.length?b.days[0][0]:null; let last=null;
+    const data=allDates.map(d=>{ if(cum[d]!==undefined)last=cum[d]; return (first&&d<first)?null:last; });
+    const col=BT_COLORS[i%BT_COLORS.length];
+    return {label:b.name||('BT'+(i+1)), data, borderColor:col, backgroundColor:'transparent', fill:false, tension:.15, pointRadius:0, borderWidth:2, spanGaps:false, hidden:b.included===false};
+  });
+  if(cv._chart)cv._chart.destroy();
+  cv._chart=new Chart(cv,{type:'line',data:{labels:allDates,datasets},options:{plugins:{legend:{display:true,labels:{color:'#8b95a5',boxWidth:12,padding:10}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y} %`}}},scales:{x:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',maxTicksLimit:9}},y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',callback:v=>v+' %'}}}}});
+}
+
+function renderBtCombo(){
+  const card=document.getElementById('btComboCard'); const bts=store.backtests.filter(b=>b.included!==false);
+  if(!bts.length){card.style.display='none';return;} card.style.display='';
+  const dayPct={}; bts.forEach(b=>b.days.forEach(([d,pnl])=>{dayPct[d]=(dayPct[d]||0)+pnl/b.deposit*100;}));
+  const dates=Object.keys(dayPct).sort();
+  let run=0,pk=0,mdd=0; const D=dates.map(d=>{run+=dayPct[d]; if(run>pk)pk=run; const dd=pk-run; if(dd>mdd)mdd=dd; return round2(run);});
+  makeLineChart(document.getElementById('btComboChart'),dates,[{data:D,borderColor:'#2ea043',backgroundColor:'rgba(46,160,67,.10)',fill:true,tension:.2,pointRadius:0,borderWidth:2}],' %');
+  // ---- statistiques globales du portefeuille ----
+  let gW=0, gL=0, trades=0, winsW=0; const monthly={};
+  bts.forEach(b=>{ const s=b.stats;
+    trades += s.nbTrades||0; winsW += (s.winRate||0)/100*(s.nbTrades||0);
+    const net=s.net||0, pf=s.pf;
+    if(pf==null||!isFinite(pf)){ gW+=Math.max(net,0); gL+=Math.max(-net,0); }
+    else if(Math.abs(pf-1)<1e-9){ gW+=Math.abs(net)/2; gL+=Math.abs(net)/2; }
+    else { const gl=net/(pf-1); gL+=gl; gW+=pf*gl; }
+    b.days.forEach(([d,pnl])=>{ const m=d.slice(0,7); monthly[m]=(monthly[m]||0)+pnl/b.deposit*100; });
+  });
+  const portPF = gL>0 ? gW/gL : (gW>0?Infinity:0);
+  const winRate = trades ? winsW/trades*100 : 0;
+  const recovery = mdd>0 ? run/mdd : (run>0?Infinity:0);
+  const mKeys=Object.keys(monthly); const posM=mKeys.filter(m=>monthly[m]>0).length;
+  const moisPos = mKeys.length ? posM/mKeys.length*100 : 0;
+  document.getElementById('btComboMeta').textContent=(dates.length?(dates[0]+' → '+dates[dates.length-1]):'')+(mKeys.length?(' · '+mKeys.length+' mois · '+bts.length+' sets'):'');
+  const cards=[
+    {lab:'Rendement total (1 %)',val:pct(run,1),cls:run>=0?'pos':'neg'},
+    {lab:'Équivalent 0,1 % (÷10)',val:pct(run/10,1),cls:run>=0?'pos':'neg'},
+    {lab:'Drawdown max',val:pct(mdd,1),cls:'warn'},
+    {lab:'Recovery factor',val:recovery===Infinity?'∞':fmt(recovery,1)},
+    {lab:'Profit factor',val:portPF===Infinity?'∞':fmt(portPF,2),cls:portPF>=1.3?'pos':portPF>=1?'warn':'neg'},
+    {lab:'Win rate',val:pct(winRate,1),cls:winRate>=50?'pos':'warn'},
+    {lab:'Trades totaux',val:trades.toLocaleString('fr-FR')},
+    {lab:'Mois positifs',val:pct(moisPos,0)+' ('+posM+'/'+mKeys.length+')'}
+  ];
+  document.getElementById('btComboStats').innerHTML=cards.map(c=>`<div class="stat"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}" style="font-size:19px">${c.val}</div></div>`).join('');
+}
+
+function renderBtCompare(a){
+  const cv=document.getElementById('btCmpChart'); const note=document.getElementById('btCmpNote');
+  if(!cv) return;
+  const norm=document.getElementById('btNorm').value;
+  const period=(document.getElementById('btPeriod')||{}).value||'full';
+  const bts=store.backtests.filter(b=>b.included!==false);
+  if(!a||!a.closed||!a.closed.length){ if(cv._chart){cv._chart.destroy();cv._chart=null;} note.textContent='En attente de trades live (compte connecté) pour comparer.'; return; }
+  const liveClosed=a.closed.filter(t=>t.closeTime).sort((x,y)=>x.closeTime-y.closeTime);
+  const liveDep=a.dep||100000; const startISO=liveClosed[0].closeTime.toISOString().slice(0,10);
+  const liveDayPct={}; liveClosed.forEach(t=>{const d=t.closeTime.toISOString().slice(0,10);liveDayPct[d]=(liveDayPct[d]||0)+t.profit/liveDep*100;});
+  const btFull={}; bts.forEach(b=>b.days.forEach(([d,pnl])=>{ btFull[d]=(btFull[d]||0)+pnl/b.deposit*100; }));
+  let btMap=btFull;
+  if(period==='sincelive'){ btMap={}; Object.keys(btFull).forEach(d=>{ if(d>=startISO) btMap[d]=btFull[d]; }); }
+  const labels=[...new Set([...Object.keys(btMap),...Object.keys(liveDayPct)])].sort();
+  const scaleBt = norm==='scaled' ? (store.settings.riskPct||0.1)/1 : 1;
+  const base = norm==='base100'?100:0;
+  function cumAligned(map, scale){
+    const ds=Object.keys(map).sort(); if(!ds.length) return {series:labels.map(()=>null), total:0};
+    const first=ds[0]; let run=0; const cum={}; ds.forEach(d=>{run+=map[d]*scale; cum[d]=run;});
+    let last=null; const series=labels.map(d=>{ if(cum[d]!==undefined)last=cum[d]; return d<first?null:round2(base+(last==null?0:last)); });
+    return {series, total:run};
+  }
+  const live=cumAligned(liveDayPct,1);
+  const bt=cumAligned(btMap,scaleBt);
+  const datasets=[{label:'Live réel',data:live.series,borderColor:'#388bfd',fill:false,tension:.2,pointRadius:2,borderWidth:2,spanGaps:false}];
+  if(bts.length) datasets.push({label:'Portefeuille backtest'+(norm==='scaled'?' ÷10':''),data:bt.series,borderColor:'#d29922',borderDash:[5,4],fill:false,tension:.15,pointRadius:0,borderWidth:2,spanGaps:false});
+  if(cv._chart)cv._chart.destroy();
+  cv._chart=new Chart(cv,{type:'line',data:{labels,datasets},options:{plugins:{legend:{display:true,labels:{color:'#8b95a5',boxWidth:12}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y}${norm==='base100'?'':' %'}`}}},scales:{x:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',maxTicksLimit:9}},y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',callback:v=>v+(norm==='base100'?'':' %')}}}}});
+  if(!bts.length){ note.textContent = store.backtests.length ? 'Coche au moins un backtest (« portefeuille ») pour le comparer à ton live.' : 'Importe tes backtests ci-dessus pour superposer la référence à ton live.'; return; }
+  const lr=live.total||0, br=bt.total||0;
+  if(period==='sincelive'){ const diff=lr-br; note.textContent=`Depuis ${startISO} : live ${pct(lr,2)} vs backtest${norm==='scaled'?' (÷10)':''} ${pct(br,2)}. `+(Math.abs(diff)<0.05?'Le live suit la référence. 👍':(diff>0?'Le live surperforme la référence.':'Le live sous-performe la référence — à surveiller.')); }
+  else { note.textContent=`Portefeuille backtesté complet (${labels[0]} → ${labels[labels.length-1]}) : ${pct(br,1)}${norm==='scaled'?' (÷10)':''}. Ton live (${pct(lr,2)} depuis ${startISO}) apparaît à droite — c'est normal qu'il soit court au début, il s'étoffera avec le temps.`; }
+}
+
+/* ---------- #2 fraîcheur des données ---------- */
+function dataAgeMin(){
+  if(!lastData) return null;
+  const t=parseT(lastData.exportedAtIso||lastData.exportedAt);
+  if(!t) return null;
+  return (Date.now()-t.getTime())/60000;
+}
+function renderStale(){
+  const banner=document.getElementById('staleBanner'); if(!banner)return;
+  const age=dataAgeMin(); const threshold=store.settings.staleMin||15;
+  if(age==null || age<=threshold){ banner.style.display='none'; return; }
+  banner.style.display='';
+  document.getElementById('staleMsg').innerHTML='<b>Données figées.</b> Le fichier MT5 n\'a pas bougé depuis <b>'+Math.round(age)+' min</b> — vérifie que MT5, l\'EA exportateur et le VPS tournent.';
+}
+
+/* ---------- #3 risque engagé (chaleur du portefeuille) ---------- */
+function renderHeat(a){
+  const bar=document.getElementById('heatBar'), txt=document.getElementById('heatTxt'), help=document.getElementById('heatHelp');
+  if(!bar)return;
+  const open=a.open||[];
+  const nSets=Object.keys(store.setNames).filter(k=>k.indexOf('magic:')===0).length||13;
+  const maxHeat=Math.max((store.settings.riskPct||0.1)*nSets, 1.3);
+  if(!open.length){ bar.style.width='0%'; bar.style.background='var(--green)'; txt.textContent='0,00 % · aucune position ouverte'; if(help)help.textContent='Aucune position ouverte exportée. (Nécessite un EA exportateur qui liste aussi les positions ouvertes.)'; return; }
+  let sum=0, unknown=0;
+  open.forEach(t=>{ const r=tradeRisk(t,a.balance); if(r)sum+=r.pct; else unknown++; });
+  bar.style.width=clamp(sum/maxHeat*100,0,100)+'%';
+  bar.style.background = sum>=maxHeat*0.8?'var(--red)':sum>=maxHeat*0.5?'var(--amber)':'var(--green)';
+  txt.textContent=pct(sum,3)+' engagé'+(unknown?(' · '+unknown+' sans SL'):'');
+  if(help)help.textContent=open.length+' position(s) ouverte(s) · capacité indicative si tout ouvre à '+pct(store.settings.riskPct||0.1,2)+' : ~'+pct(maxHeat,2);
+}
+
+/* ---------- #6 heatmap des rendements mensuels ---------- */
+function monthlyReturns(source,a){
+  const m={};
+  if(source==='backtest'){
+    const bts=store.backtests.filter(b=>b.included!==false);
+    bts.forEach(b=>b.days.forEach(([d,pnl])=>{ const k=d.slice(0,7); m[k]=(m[k]||0)+pnl/b.deposit*100; }));
+    const scale=(store.settings.riskPct||0.1)/1; Object.keys(m).forEach(k=>m[k]*=scale);
+  } else {
+    const dep=a.dep||100000;
+    a.closed.forEach(t=>{ if(!t.closeTime)return; const k=t.closeTime.toISOString().slice(0,7); m[k]=(m[k]||0)+t.profit/dep*100; });
+  }
+  return m;
+}
+function renderMonthHeat(a){
+  const el=document.getElementById('monthHeat'); if(!el)return;
+  const src=(document.getElementById('heatSource')||{}).value||'live';
+  const m=monthlyReturns(src,a); const keys=Object.keys(m);
+  if(!keys.length){ el.innerHTML='<div class="empty">Pas encore de données mensuelles'+(src==='backtest'?' — importe des backtests':'')+'.</div>'; return; }
+  const years=[...new Set(keys.map(k=>+k.slice(0,4)))].sort();
+  const maxAbs=Math.max(0.01,...keys.map(k=>Math.abs(m[k])));
+  const MO=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
+  const cell=v=>{ if(v===undefined) return '<td style="padding:2px"><div style="height:30px;border-radius:4px;background:var(--panel2)"></div></td>';
+    const al=Math.min(Math.abs(v)/maxAbs,1); const rgb=v>=0?'46,160,67':'248,81,73';
+    return '<td style="padding:2px" title="'+pct(v,2)+'"><div style="height:30px;border-radius:4px;background:rgba('+rgb+','+(0.12+al*0.78).toFixed(2)+');display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text)">'+(Math.abs(v)>=0.05?fmt(v,1):'')+'</div></td>'; };
+  let html='<table style="width:100%;border-collapse:collapse"><thead><tr><th style="font-size:11px;text-align:left;color:var(--dim)">Année</th>'+MO.map(x=>'<th style="font-size:10px;text-align:center;color:var(--dim)">'+x+'</th>').join('')+'<th style="font-size:11px;text-align:center;color:var(--dim)">Total</th></tr></thead><tbody>';
+  years.forEach(y=>{ let yt=0,has=false; html+='<tr><td style="font-size:12px;font-weight:500">'+y+'</td>';
+    for(let mo=1;mo<=12;mo++){ const v=m[y+'-'+String(mo).padStart(2,'0')]; if(v!==undefined){yt+=v;has=true;} html+=cell(v); }
+    html+='<td style="padding:2px;text-align:center;font-size:11px;font-weight:500" class="'+(yt>=0?'pos':'neg')+'">'+(has?pct(yt,1):'')+'</td></tr>'; });
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
+
+/* ---------- lot calculator ---------- */
+function calcLot(){
+  const bal=Number(document.getElementById('setBalance').value)||100000;
+  const risk=Number(document.getElementById('setRiskPct').value)||0.1;
+  const sl=Number(document.getElementById('calcSl').value)||1;
+  const pv=Number(document.getElementById('calcPipVal').value)||10;
+  const riskUsd=bal*risk/100;
+  const lots=riskUsd/(sl*pv);
+  document.getElementById('calcRiskUsd').textContent=money(riskUsd);
+  document.getElementById('calcLots').textContent=fmt(lots,2)+' lot';
+}
+['calcSl','calcPipVal','setBalance','setRiskPct'].forEach(id=>document.addEventListener('input',e=>{if(e.target.id&&['calcSl','calcPipVal','setBalance','setRiskPct'].includes(e.target.id))calcLot();}));
+document.getElementById('calcSym').addEventListener('change',e=>{const d={forex:10,jpy:9,xau:1,idx:1};document.getElementById('calcPipVal').value=d[e.target.value]||10;calcLot();});
+
+/* ---------- settings save ---------- */
+document.getElementById('saveRisk').addEventListener('click',()=>{
+  store.settings={balance:Number(document.getElementById('setBalance').value)||100000,riskPct:Number(document.getElementById('setRiskPct').value)||0.1,ddWarn:Number(document.getElementById('setDdWarn').value)||6,ddMax:Number(document.getElementById('setDdMax').value)||10};
+  saveStore(store); render(); flash('Paramètres enregistrés');
+});
+function flash(msg){const el=document.getElementById('syncTxt');const p=document.getElementById('syncPill');p.style.display='';el.textContent=msg;setTimeout(()=>updateSyncLabel(),2500);}
+
+/* #6 sélecteur de source de la heatmap */
+(function(){ const hs=document.getElementById('heatSource'); if(hs) hs.addEventListener('change',()=>renderMonthHeat(lastA||{closed:[],dep:100000})); })();
+
+/* #7 export / import de la configuration */
+(function(){
+  const exp=document.getElementById('cfgExport'), imp=document.getElementById('cfgImport'), msg=document.getElementById('cfgMsg');
+  if(exp) exp.addEventListener('click',()=>{
+    try{
+      const blob=new Blob([JSON.stringify(store,null,2)],{type:'application/json'});
+      const url=URL.createObjectURL(blob); const el=document.createElement('a');
+      el.href=url; el.download='cockpit-config-'+new Date().toISOString().slice(0,10)+'.json';
+      document.body.appendChild(el); el.click(); el.remove(); URL.revokeObjectURL(url);
+      if(msg) msg.textContent='Config exportée ('+(store.backtests?store.backtests.length:0)+' backtests, réglages, mappings). Range ce fichier en lieu sûr.';
+    }catch(e){ if(msg) msg.textContent='Erreur à l\'export : '+e; }
+  });
+  if(imp) imp.addEventListener('change',e=>{
+    const f=e.target.files[0]; if(!f)return;
+    const rd=new FileReader();
+    rd.onload=()=>{ try{ const obj=JSON.parse(rd.result);
+      if(!obj||typeof obj!=='object'||(!obj.backtests&&!obj.setNames&&!obj.settings)) throw new Error('format');
+      if(!confirm('Remplacer la configuration actuelle par ce fichier ? L\'app va se recharger.')) return;
+      localStorage.setItem(LS, JSON.stringify(obj)); location.reload();
+    }catch(err){ if(msg) msg.textContent='Fichier de config invalide.'; } };
+    rd.readAsText(f); e.target.value='';
+  });
+})();
+
+/* #2 rafraîchit l'âge des données chaque minute (au cas où le fichier se fige) */
+setInterval(function(){ try{ renderStale(); }catch(e){} }, 60000);
+
+/* ---------- file reading ---------- */
+function ingest(data){
+  lastData=data;
+  const a=analyze(data);
+  const snap={t:Date.now(),eq:Math.round(a.equity)};
+  const last=store.equitySnaps[store.equitySnaps.length-1];
+  if(!last||last.eq!==snap.eq||snap.t-last.t>POLL_MS*0.9){store.equitySnaps.push(snap);if(store.equitySnaps.length>2000)store.equitySnaps.shift();saveStore(store);}
+  document.getElementById('acctLine').textContent=`Compte ${data.account||'?'} · ${data.type||''} · ${data.company||''} · ${data.currency||'USD'}`;
+  setConn(true); updateSyncLabel(data); render();
+}
+async function readHandle(){
+  if(!fileHandle)return;
+  try{ const file=await fileHandle.getFile(); const text=await file.text(); ingest(JSON.parse(text)); }
+  catch(e){ console.error(e); setConn(true,'Erreur de lecture'); }
+}
+async function fetchData(){
+  try{ const r=await fetch(DATA_ENDPOINT+'?t='+Date.now(),{cache:'no-store'}); if(!r.ok)throw new Error('HTTP '+r.status); ingest(await r.json()); }
+  catch(e){ console.error(e); setConn(false,'Fichier introuvable — le serveur tourne-t-il ?'); }
+}
+function updateSyncLabel(data){
+  const p=document.getElementById('syncPill'); p.style.display='';
+  const t=data&&data.exportedAt?data.exportedAt:new Date().toLocaleTimeString('fr-FR');
+  document.getElementById('syncTxt').textContent='Données du '+t;
+}
+function setConn(on,txt){
+  const dot=document.getElementById('connDot'),lab=document.getElementById('connTxt');
+  dot.className='dot '+(on?'on':'off'); lab.textContent=txt||(on?'Connecté · lecture auto 5 min':'Déconnecté');
+  document.getElementById('btnConnect').innerHTML=on?'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>Fichier connecté':'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>Connecter le fichier';
+}
+function startPolling(fn){ fn=fn||readHandle; if(pollTimer)clearInterval(pollTimer); pollTimer=setInterval(fn,POLL_MS); }
+
+document.getElementById('btnConnect').addEventListener('click',async()=>{
+  if(!window.showOpenFilePicker){ alert("Ton navigateur ne supporte pas la lecture auto. Ouvre cette page dans Chrome ou Edge, ou glisse le fichier dans la zone en bas."); showDropzone(); return; }
+  try{
+    const [h]=await window.showOpenFilePicker({ id:'dzfile', types:[{description:'Fichier de synchro MT5',accept:{'*/*':['.json','']}}], excludeAcceptAllOption:false });
+    fileHandle=h; await idbSet('handle',h);
+    setConn(true); await readHandle(); startPolling();
+  }catch(e){ if(e.name!=='AbortError')console.error(e); }
+});
+document.getElementById('btnRefresh').addEventListener('click',()=>{ if(SERVER_MODE)fetchData(); else if(fileHandle)readHandle(); else document.getElementById('btnConnect').click(); });
+
+/* init on load */
+(async()=>{
+  if(SERVER_MODE){
+    // served by the local Python server: read /data automatically, every browser
+    document.getElementById('btnConnect').style.display='none';
+    setConn(false,'Connexion au serveur…');
+    await fetchData();
+    startPolling(fetchData);
+  } else {
+    // opened as a local file: use the File System Access API (Chrome / Edge)
+    try{
+      const h=await idbGet('handle');
+      if(h){ const perm=await h.queryPermission({mode:'read'});
+        if(perm==='granted'){ fileHandle=h; setConn(true); await readHandle(); startPolling(); }
+        else { setConn(false,'Reconnexion requise'); document.getElementById('btnConnect').innerHTML='<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>Reconnecter le fichier';
+          document.getElementById('btnConnect').addEventListener('click',async function once(){ try{const p=await fileHandle.requestPermission({mode:'read'}); if(p==='granted'){await readHandle();startPolling();}}catch(e){} },{once:true});
+        }
+      }
+    }catch(e){}
+  }
+  // fill settings inputs
+  document.getElementById('setRiskPct').value=store.settings.riskPct;
+  document.getElementById('setDdWarn').value=store.settings.ddWarn;
+  document.getElementById('setDdMax').value=store.settings.ddMax;
+  calcLot();
+  renderBacktests(lastA);
+})();
+
+/* drag & drop fallback */
+function showDropzone(){
+  if(document.getElementById('dzFallback'))return;
+  const v=document.getElementById('v-cockpit');
+  const dz=document.createElement('div'); dz.className='dz'; dz.id='dzFallback';
+  dz.style.marginBottom='14px';
+  dz.innerHTML='Glisse ici le fichier «'+FILE_NAME+'» (lecture ponctuelle, sans auto-refresh)';
+  v.insertBefore(dz,v.firstChild);
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+  dz.addEventListener('drop',async e=>{e.preventDefault();dz.classList.remove('drag');const f=e.dataTransfer.files[0];if(f){const txt=await f.text();try{lastData=JSON.parse(txt);setConn(true,'Lecture ponctuelle');render();}catch(err){alert('Fichier illisible');}}});
+}
+
+/* tabs */
+document.getElementById('tabs').addEventListener('click',e=>{
+  const t=e.target.closest('.tab'); if(!t)return;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active'); document.getElementById('v-'+t.dataset.v).classList.add('active');
+  if(t.dataset.v==='journal'&&lastData)render();
+  if(t.dataset.v==='backtests')renderBacktests(lastA);
+});
+
+/* backtests import + comparison controls */
+(function(){
+  const dz=document.getElementById('btDrop'), fi=document.getElementById('btFile');
+  if(dz){
+    dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+    dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+    dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');[...e.dataTransfer.files].forEach(f=>{if(/\.html?$/i.test(f.name))btImportFile(f);});});
+  }
+  if(fi) fi.addEventListener('change',e=>{[...e.target.files].forEach(f=>btImportFile(f));e.target.value='';});
+  const nb=document.getElementById('btNorm');
+  if(nb) nb.addEventListener('change',()=>renderBtCompare(lastA));
+  const pb=document.getElementById('btPeriod');
+  if(pb) pb.addEventListener('change',()=>renderBtCompare(lastA));
+  const clr=document.getElementById('btClearAll');
+  if(clr) clr.addEventListener('click',()=>{
+    if(!store.backtests.length) return;
+    if(!confirm('Effacer les '+store.backtests.length+' backtest(s) importé(s) et remettre les graphes à zéro ?')) return;
+    store.backtests=[]; saveStore(store); renderBacktests(lastA);
+  });
+})();
+
+/* render once with placeholder if no data yet (shows empty states) */
+</script>
+</body>
+</html>
