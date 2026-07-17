@@ -344,6 +344,7 @@
           <option value="0.1">0,1 % — ÷10</option>
         </select>
       </label>
+      <button class="ghost sm" id="btExportPDF" title="Génère un rapport imprimable (Enregistrer au format PDF dans la fenêtre d'impression)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>Rapport PDF</button>
       <button class="ghost sm" id="btToggleAll" title="Replier ou déplier toutes les sections">Tout replier</button>
       <button class="ghost sm" id="btPublier" title="Génère backtests.json à déposer sur GitHub : tes autres appareils le chargeront tout seuls"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Publier les backtests</button>
       <button class="ghost sm" id="btClearAll" style="border-color:var(--red);color:var(--red)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>Tout effacer</button>
@@ -396,6 +397,21 @@
         <div class="help" style="margin-bottom:10px">Chaque creux entre deux sommets du compte : sa profondeur, sa durée, et le temps qu'il a fallu pour revenir au sommet précédent. Répond à « combien de temps resterais-je dans le rouge ? ».</div>
         <div class="grid g4" id="btDDStats"></div>
         <div id="btDDTable" style="margin-top:14px"></div>
+      </div>
+    </details>
+
+    <details class="card" data-sect="btQA" id="btQACard" style="margin-top:14px" open>
+      <summary><h3>Analyse lots fixes <span style="font-weight:400;color:var(--dim);font-size:11px">(façon QuantAnalyzer)</span> <span class="tag a" id="btQATag">—</span></h3></summary>
+      <div class="sect-body">
+        <div class="help" style="margin-bottom:10px">Ici les 20 sets tournent sur un compte unique en gardant leurs <b>lots d'origine</b>, <b>sans intérêts composés</b> — le modèle de QuantAnalyzer. C'est l'inverse du « Portefeuille combiné » plus haut (composé). Les deux encadrent la réalité : ce modèle-ci vaut si tes EA tradent en <b>lots fixes</b>, l'autre s'ils risquent un <b>% du solde</b>.</div>
+        <div class="grid g4" id="btQAStats"></div>
+        <h4 style="margin:16px 0 8px;font-size:13px;color:var(--muted)">Performance mensuelle ($ · lots fixes)</h4>
+        <div id="btQAMonthly" style="overflow:auto"></div>
+        <div class="grid g2" style="margin-top:16px">
+          <div><h4 style="margin:0 0 8px;font-size:13px;color:var(--muted)">P&amp;L par heure (clôture)</h4><canvas id="btQAHourChart" height="120"></canvas></div>
+          <div><h4 style="margin:0 0 8px;font-size:13px;color:var(--muted)">P&amp;L par jour de semaine</h4><canvas id="btQADayChart" height="120"></canvas></div>
+        </div>
+        <div class="help" style="margin-top:10px" id="btQANote"></div>
       </div>
     </details>
 
@@ -1245,8 +1261,8 @@ function renderBacktests(a){
     document.getElementById('btComboCard').style.display='none'; document.getElementById('btAllCard').style.display='none';
     const wrapE=document.getElementById('btListWrap'); if(wrapE) wrapE.style.display='none';
     if(tb) tb.style.display='none';
-    ['btAllChart','btComboChart','btMCChart'].forEach(id=>{const c=document.getElementById(id); if(c&&c._chart){c._chart.destroy();c._chart=null;}});
-    ['btRatiosCard','btMCCard','btDDCard'].forEach(id=>{const e=document.getElementById(id); if(e)e.style.display='none';});
+    ['btAllChart','btComboChart','btMCChart','btQAHourChart','btQADayChart'].forEach(id=>{const c=document.getElementById(id); if(c&&c._chart){c._chart.destroy();c._chart=null;}});
+    ['btRatiosCard','btMCCard','btDDCard','btQACard'].forEach(id=>{const e=document.getElementById(id); if(e)e.style.display='none';});
     btSimCourante=null;
     renderBtCorr(); renderBtCompare(a); return;
   }
@@ -1561,6 +1577,72 @@ function initSections(){
   majToggleAll();
 }
 
+/* ================= ANALYSE FAÇON QUANTANALYZER =================
+   QuantAnalyzer fusionne les trades de tous les sets sur UN compte, en gardant
+   les LOTS D'ORIGINE et SANS intérêts composés (modèle additif). C'est l'inverse
+   du portefeuille combiné de l'app (compte unique, % du capital, composé).
+   Les deux encadrent la réalité : additif = si tes EA tradent en lots fixes,
+   composé = s'ils risquent un % du solde. Vérifié : ce modèle reproduit les
+   chiffres de QuantAnalyzer au net et au drawdown à 0,3 % près. */
+function btAdditif(bts){
+  const evs=[];
+  bts.forEach(b=>(b.deals||[]).forEach(d=>evs.push({t:d[0], pnl:d[1], out:d.length>2?d[2]:1})));
+  if(!evs.length) return null;
+  evs.sort((a,b)=>a.t-b.t);
+  let eq=0, pic=0, mddAbs=0;
+  const trades=[];                 // P&L de chaque trade = deal de SORTIE (convention MT5)
+  const parMois={};                // "AAAA-MM" -> P&L
+  evs.forEach(e=>{
+    eq+=e.pnl;
+    if(eq>pic)pic=eq;
+    const dd=pic-eq; if(dd>mddAbs)mddAbs=dd;
+    if(e.out) trades.push(e.pnl);
+    const d=new Date(e.t*1000);
+    const mk=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    parMois[mk]=(parMois[mk]||0)+e.pnl;
+  });
+  return {net:eq, mddAbs, trades, evs, parMois};
+}
+
+/* Statistiques de trades façon QuantAnalyzer, sur les P&L par trade.
+   Classement gagnant/perdant au niveau du DEAL (comme MT5, comme le reste de
+   l'app). QuantAnalyzer classe au round-trip : écart attendu ~1 %. */
+function btStatsQA(trades){
+  const n=trades.length; if(!n) return null;
+  const wins=trades.filter(x=>x>0), losses=trades.filter(x=>x<0);
+  const gp=wins.reduce((a,b)=>a+b,0), gl=losses.reduce((a,b)=>a+b,0);
+  let maxW=0,maxL=0,cW=0,cL=0;
+  trades.forEach(x=>{
+    if(x>0){cW++;cL=0;if(cW>maxW)maxW=cW;}
+    else if(x<0){cL++;cW=0;if(cL>maxL)maxL=cL;}
+  });
+  const mean=trades.reduce((a,b)=>a+b,0)/n;
+  const sd=Math.sqrt(trades.reduce((a,b)=>a+(b-mean)*(b-mean),0)/n);
+  return {
+    n, wins:wins.length, losses:losses.length, winRate:wins.length/n*100,
+    gp, gl, pf: gl!==0?gp/Math.abs(gl):(gp>0?Infinity:0),
+    avgWin: wins.length?gp/wins.length:0, avgLoss: losses.length?gl/losses.length:0,
+    payout: (wins.length&&losses.length)?(gp/wins.length)/Math.abs(gl/losses.length):null,
+    largestWin: Math.max(...trades), largestLoss: Math.min(...trades),
+    maxConsecWin:maxW, maxConsecLoss:maxL,
+    expectancy: mean,                              // $ moyen par trade
+    expectancyR: sd>0?mean/sd:null,                // espérance en R (Van Tharp)
+    sqnQA: sd>0?Math.sqrt(n)*mean/sd:null          // SQN NON plafonné (convention QuantAnalyzer)
+  };
+}
+
+/* Répartition des trades par heure (0-23) et par jour de semaine (0=dim..6=sam),
+   en nombre ET en P&L. Heure LOCALE du deal de sortie. */
+function btDistrib(evs){
+  const H=Array.from({length:24},()=>({n:0,pl:0}));
+  const J=Array.from({length:7},()=>({n:0,pl:0}));
+  evs.forEach(e=>{ if(!e.out)return; const d=new Date(e.t*1000);
+    const h=d.getHours(), j=d.getDay();
+    H[h].n++; H[h].pl+=e.pnl; J[j].n++; J[j].pl+=e.pnl;
+  });
+  return {H,J};
+}
+
 /* Fabrique une tuile de stat (même gabarit que les cartes du portefeuille). */
 function statHTML(c){
   return `<div class="stat" style="background:var(--panel2)"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}" style="font-size:19px">${c.val}</div>${c.sub?`<div class="help">${c.sub}</div>`:''}</div>`;
@@ -1643,6 +1725,180 @@ function renderBtMC(sim){
     +pct(MC.dd95,1)+' dans 1 cas sur 20'+(ratio>=1.5?(' — soit '+fmt(ratio,1)+'× pire que ce que tu as vu. Dimensionne ton risque sur ce chiffre, pas sur le drawdown historique.'):'.')
     +'<br>🔴 <b>Un résultat « peu dispersé » ne valide PAS la stratégie.</b> Ce test rejoue <i>tes</i> journées : si les backtests sont sur-optimisés, leurs journées le sont aussi et le Monte Carlo le sera tout autant. Il répond à « et si j\'avais eu moins de chance dans l\'ordre des trades ? », pas à « cet avantage est-il réel ? ».'
     +'<br>⚠ Autre limite : en rebattant les cartes, il suppose les journées indépendantes et efface les séries (plusieurs mauvais jours d\'affilée), ce qui tend à <b>sous-estimer</b> les creux. Il ne modélise ni un changement de régime de marché, ni une stratégie qui cesserait de fonctionner.';
+}
+
+/* ---------- export : rapport PDF imprimable ----------
+   L'app est un HTML statique sur GitHub Pages : pas de bibliothèque PDF possible.
+   On construit une page imprimable propre (thème clair) et on lance l'impression
+   du navigateur ; « Enregistrer au format PDF » fait le reste. Sans dépendance. */
+function btExportPDF(){
+  const bts=store.backtests.filter(b=>b.included!==false);
+  if(!bts.length){ alert('Aucun backtest à exporter.'); return; }
+  const capBt=(()=>{ const d=[...new Set(bts.map(b=>Math.round(Number(b.deposit)||0)).filter(x=>x>0))]; return d.length===1?d[0]:100000; })();
+  const sim=btSimuleCompteUnique(bts, capBt, btStatScale());
+  const R=btRatios(sim);
+  const add=btAdditif(bts);
+  const s=btStatsQA(add.trades);
+  const dds=btDrawdowns(sim).slice().sort((a,b)=>b.profondeur-a.profondeur);
+  const simul=btMaxSimul(bts);
+  const money0=n=>fmt(n,0)+' $';
+
+  // graphiques déjà rendus -> images PNG (sur fond sombre, encadrées comme tel)
+  const img=id=>{ const c=document.getElementById(id); try{ return (c&&c._chart)?c.toDataURL('image/png'):null; }catch(e){ return null; } };
+  const imgCombo=img('btComboChart'), imgHour=img('btQAHourChart'), imgDay=img('btQADayChart');
+
+  const tuiles=arr=>'<div class="grid">'+arr.map(c=>`<div class="tuile"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}">${c.val}</div>${c.sub?`<div class="sub">${c.sub}</div>`:''}</div>`).join('')+'</div>';
+
+  // grille mensuelle
+  const MOIS=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
+  const annees={}; Object.keys(add.parMois).forEach(k=>{const[y,m]=k.split('-');(annees[y]=annees[y]||{})[+m-1]=add.parMois[k];});
+  let grille='<table class="mois"><thead><tr><th>Année</th>'+MOIS.map(m=>`<th>${m}</th>`).join('')+'<th>Total</th></tr></thead><tbody>';
+  Object.keys(annees).sort().forEach(y=>{ let tot=0; grille+=`<tr><td class="l">${y}</td>`;
+    for(let m=0;m<12;m++){const v=annees[y][m]; if(v!==undefined)tot+=v;
+      grille+=`<td class="${v===undefined?'':v>0?'p':'n'}">${v===undefined?'·':fmt(v,0)}</td>`;}
+    grille+=`<td class="${tot>0?'p':'n'} b">${fmt(tot,0)}</td></tr>`; });
+  grille+='</tbody></table>';
+
+  // épisodes de drawdown
+  const fr=iso=>new Date(iso+'T12:00:00').toLocaleDateString('fr-FR');
+  let ddTab='<table class="lst"><thead><tr><th>Profondeur</th><th>Début</th><th>Creux</th><th>Retour</th><th>Durée</th></tr></thead><tbody>'
+    +dds.slice(0,6).map(e=>`<tr><td class="n">${pct(e.profondeur,2)}</td><td>${fr(e.debut)}</td><td>${fr(e.creuxDate)}</td><td>${e.fin?fr(e.fin):'jamais'}</td><td>${e.dureeJours} j</td></tr>`).join('')
+    +'</tbody></table>';
+
+  const H=[];
+  H.push('<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport portefeuille — Cockpit Darwinex Zero</title><style>');
+  H.push(`*{box-sizing:border-box}body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1a1f29;margin:0;padding:24px;font-size:12px}
+    h1{font-size:20px;margin:0 0 2px}h2{font-size:14px;margin:22px 0 8px;padding-bottom:4px;border-bottom:2px solid #7c6df2;color:#3a2fb0}
+    .meta{color:#667;font-size:11px;margin-bottom:4px}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:6px 0}
+    .tuile{border:1px solid #dde;border-radius:6px;padding:8px 10px}
+    .tuile .lab{font-size:9.5px;color:#667;text-transform:uppercase;letter-spacing:.3px}
+    .tuile .val{font-size:16px;font-weight:600;margin-top:2px}.tuile .sub{font-size:9px;color:#889;margin-top:1px}
+    .pos{color:#1a7f37}.neg{color:#c1341c}.warn{color:#9a6700}
+    table{border-collapse:collapse;width:100%;font-size:10px;margin-top:4px}
+    th,td{border:1px solid #e5e8ee;padding:3px 6px;text-align:right}th{background:#f4f5f8;font-weight:600}
+    td.l,th:first-child{text-align:left}.mois td.p{color:#1a7f37;background:#eefaf0}.mois td.n{color:#c1341c;background:#fdf0ee}
+    .lst td.n{color:#c1341c}td.b{font-weight:700}
+    .note{font-size:10px;color:#556;background:#f4f5f8;border-radius:6px;padding:8px 10px;margin-top:8px}
+    .chart{background:#0e1117;border-radius:6px;padding:10px;margin-top:8px}.chart img{width:100%;display:block}
+    .chart h3{color:#8b95a5;font-size:10px;margin:0 0 6px;font-weight:500}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    @media print{body{padding:0}h2{break-after:avoid}.tuile,tr,.chart{break-inside:avoid}}
+    footer{margin-top:20px;font-size:9px;color:#889;border-top:1px solid #e5e8ee;padding-top:6px}`);
+  H.push('</style></head><body>');
+  H.push('<h1>Rapport de portefeuille</h1>');
+  H.push('<div class="meta">Cockpit Darwinex Zero · '+bts.length+' sets · généré le '+new Date().toLocaleString('fr-FR')+'</div>');
+
+  H.push('<h2>Portefeuille combiné — compte unique composé (à '+btStatTxt()+')</h2>');
+  H.push(tuiles([
+    {lab:'Capital de départ',val:money0(sim.capital)},
+    {lab:'Balance finale',val:money0(sim.final),cls:sim.final>=sim.capital?'pos':'neg',sub:(sim.final>=sim.capital?'+':'')+money0(sim.final-sim.capital)},
+    {lab:'Rendement',val:pct(sim.rendement,1),cls:sim.rendement>=0?'pos':'neg'},
+    {lab:'Drawdown max',val:pct(sim.mdd,1),cls:'warn'},
+    {lab:'CAGR',val:R&&R.cagr!=null?pct(R.cagr,1):'—',cls:'pos'},
+    {lab:'Sharpe / Sortino',val:R?fmt(R.sharpe,2)+' / '+fmt(R.sortino,2):'—'},
+    {lab:'MAR (CAGR÷DD)',val:R&&R.mar!=null?fmt(R.mar,2):'—'},
+    {lab:'Positions simult. max',val:simul.max==null?'—':String(simul.max)}
+  ]));
+  if(imgCombo) H.push('<div class="chart"><h3>Courbe d\'équité (compte unique, '+btStatTxt()+')</h3><img src="'+imgCombo+'"></div>');
+
+  H.push('<h2>Analyse lots fixes — façon QuantAnalyzer (modèle additif, sans composer)</h2>');
+  H.push(tuiles([
+    {lab:'Profit net',val:money0(add.net),cls:'pos'},
+    {lab:'Drawdown max',val:money0(add.mddAbs),cls:'neg',sub:pct(capBt>0?add.mddAbs/capBt*100:0,1)+' de '+money0(capBt)},
+    {lab:'Profit factor',val:s.pf===Infinity?'∞':fmt(s.pf,2)},
+    {lab:'Win rate',val:pct(s.winRate,1)},
+    {lab:'Espérance / trade',val:money0(s.expectancy)},
+    {lab:'Espérance en R',val:s.expectancyR==null?'—':fmt(s.expectancyR,3)+' R'},
+    {lab:'SQN (non plafonné)',val:s.sqnQA==null?'—':fmt(s.sqnQA,2)},
+    {lab:'Séries gains / pertes',val:s.maxConsecWin+' / '+s.maxConsecLoss}
+  ]));
+  H.push('<h2>Performance mensuelle ($ · lots fixes)</h2>'+grille);
+  if(imgHour||imgDay){ H.push('<div class="two">');
+    if(imgHour) H.push('<div class="chart"><h3>P&amp;L par heure</h3><img src="'+imgHour+'"></div>');
+    if(imgDay)  H.push('<div class="chart"><h3>P&amp;L par jour de semaine</h3><img src="'+imgDay+'"></div>');
+    H.push('</div>'); }
+
+  H.push('<h2>Épisodes de drawdown (compte unique)</h2>'+ddTab);
+
+  H.push('<div class="note"><b>Deux modèles, deux réponses.</b> Le « compte unique composé » suppose que chaque EA risque un % du capital commun qui grossit (intérêts composés). '
+    +'Le « lots fixes » garde les lots d\'origine sans composer (modèle QuantAnalyzer). La réalité dépend du sizing de tes EA et se situe entre les deux. '
+    +'Estimations indicatives à partir de backtests — pas une garantie de performance future, ni un conseil en investissement.</div>');
+  H.push('<footer>Cockpit Darwinex Zero — rapport généré localement. Les backtests couvrent '+(R?fmt(R.ans,1):'?')+' ans.</footer>');
+  H.push('</body></html>');
+
+  const w=window.open('', '_blank');
+  if(!w){ alert('La fenêtre du rapport a été bloquée. Autorise les pop-ups pour ce site, puis réessaie.'); return; }
+  w.document.write(H.join(''));
+  w.document.close();
+  // laisser les images se charger avant d'ouvrir l'impression
+  w.onload=()=>{ setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} }, 300); };
+}
+
+/* ---------- rendu : analyse lots fixes (QuantAnalyzer) ---------- */
+function renderBtQA(){
+  const card=document.getElementById('btQACard'); if(!card) return;
+  const bts=store.backtests.filter(b=>b.included!==false);
+  const add=bts.length?btAdditif(bts):null;
+  if(!add){ card.style.display='none';
+    ['btQAHourChart','btQADayChart'].forEach(id=>{const c=document.getElementById(id);if(c&&c._chart){c._chart.destroy();c._chart=null;}});
+    return; }
+  card.style.display='block';
+  const s=btStatsQA(add.trades);
+  const money0=n=>fmt(n,0)+' $';
+  const el=document.getElementById('btQAStats'), tag=document.getElementById('btQATag');
+
+  // Rappel du modèle composé pour la mise en regard
+  const cap=(()=>{ const d=[...new Set(bts.map(b=>Math.round(Number(b.deposit)||0)).filter(x=>x>0))]; return d.length===1?d[0]:100000; })();
+  const ddPctSurCap = cap>0 ? add.mddAbs/cap*100 : 0;
+
+  el.innerHTML=[
+    {lab:'Profit net (lots fixes)', val:money0(add.net), cls:add.net>=0?'pos':'neg', sub:'somme des trades, sans composer'},
+    {lab:'Drawdown max', val:money0(add.mddAbs), cls:'neg', sub:'soit '+pct(ddPctSurCap,1)+' d\'un compte de '+money0(cap)},
+    {lab:'Profit factor', val:s.pf===Infinity?'∞':fmt(s.pf,2), cls:s.pf>=1.3?'pos':s.pf>=1?'warn':'neg', sub:'gains ÷ pertes'},
+    {lab:'Espérance / trade', val:money0(s.expectancy), cls:s.expectancy>=0?'pos':'neg', sub:s.n.toLocaleString('fr-FR')+' trades'},
+    {lab:'Espérance en R', val:s.expectancyR==null?'—':fmt(s.expectancyR,3)+' R', cls:s.expectancyR>=0.1?'pos':'', sub:'gain moyen ÷ écart-type'},
+    {lab:'SQN (non plafonné)', val:s.sqnQA==null?'—':fmt(s.sqnQA,2), sub:'convention QuantAnalyzer'},
+    {lab:'Séries max gains / pertes', val:s.maxConsecWin+' / '+s.maxConsecLoss, sub:'trades consécutifs'},
+    {lab:'Plus gros gain / perte', val:money0(s.largestWin)+' / '+money0(s.largestLoss), sub:'ratio de paiement '+(s.payout==null?'—':fmt(s.payout,2))}
+  ].map(statHTML).join('');
+
+  // ---- grille mensuelle année × mois ----
+  const MOIS=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
+  const annees={}; Object.keys(add.parMois).forEach(k=>{ const [y,m]=k.split('-'); (annees[y]=annees[y]||{})[+m-1]=add.parMois[k]; });
+  const ys=Object.keys(annees).sort();
+  const cellCol=v=> v===undefined?'':(v>0?'#7ee2a0':v<0?'#ff9b95':'var(--muted)');
+  const cellBg=v=> v===undefined?'transparent':(v>0?'var(--green-soft)':v<0?'var(--red-soft)':'var(--panel2)');
+  let mh='<table style="text-align:right;font-size:11.5px;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:4px 8px">Année</th>'
+    +MOIS.map(m=>`<th style="padding:4px 6px;text-align:right">${m}</th>`).join('')+'<th style="padding:4px 8px;text-align:right">Total</th></tr></thead><tbody>';
+  ys.forEach(y=>{
+    let tot=0;
+    mh+=`<tr><td style="text-align:left;font-weight:500;padding:4px 8px">${y}</td>`;
+    for(let m=0;m<12;m++){ const v=annees[y][m]; if(v!==undefined)tot+=v;
+      mh+=`<td style="padding:4px 6px;background:${cellBg(v)};color:${cellCol(v)}">${v===undefined?'·':fmt(v,0)}</td>`; }
+    mh+=`<td style="padding:4px 8px;font-weight:600;color:${cellCol(tot)}">${fmt(tot,0)}</td></tr>`;
+  });
+  mh+='</tbody></table>';
+  document.getElementById('btQAMonthly').innerHTML=mh;
+
+  // ---- distributions ----
+  const D=btDistrib(add.evs);
+  const couleur=pl=> pl>=0?'#2ea043':'#f85149';
+  makeBarChart(document.getElementById('btQAHourChart'),
+    D.H.map((_,i)=>String(i)+'h'), D.H.map(x=>Math.round(x.pl)), D.H.map(x=>couleur(x.pl)),
+    v=>fmt(v,0)+' $');
+  const JN=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+  makeBarChart(document.getElementById('btQADayChart'),
+    JN, D.J.map(x=>Math.round(x.pl)), D.J.map(x=>couleur(x.pl)),
+    v=>fmt(v,0)+' $');
+
+  const rdd=cap>0?add.net/add.mddAbs:0;
+  tag.textContent = rdd>=30?'très rentable/DD':rdd>=10?'solide':'à surveiller';
+  tag.className='tag '+(rdd>=30?'g':rdd>=10?'a':'r');
+  document.getElementById('btQANote').innerHTML=
+    'Return/DD = <b>'+fmt(rdd,1)+'</b> (net ÷ drawdown max). '
+    +'Ces chiffres reproduisent QuantAnalyzer à ~1 % près ; le léger écart vient du classement gagnant/perdant au niveau du <i>deal</i> (comme MT5) plutôt qu\'au round-trip. '
+    +'Rappel : le drawdown en % dépend du capital que tu mets sur le compte — il est ici rapporté à '+money0(cap)+'.';
 }
 
 /* ---------- rendu : analyse des drawdowns ---------- */
@@ -1884,7 +2140,7 @@ function renderBtCombo(){
   // Les analyses de robustesse repartent de CETTE simulation : on les enchaîne ici
   // plutôt que de la recalculer trois fois.
   btSimCourante=sim;
-  renderBtRatios(sim); renderBtMC(sim); renderBtDD(sim);
+  renderBtRatios(sim); renderBtMC(sim); renderBtDD(sim); renderBtQA();
 }
 
 function renderBtCompare(a){
@@ -2164,6 +2420,8 @@ document.getElementById('tabs').addEventListener('click',e=>{
   if(mcb) mcb.addEventListener('click',()=>{ if(btSimCourante) renderBtMC(btSimCourante); });
   const pub=document.getElementById('btPublier');
   if(pub) pub.addEventListener('click',btPublier);
+  const pdf=document.getElementById('btExportPDF');
+  if(pdf) pdf.addEventListener('click',btExportPDF);
   const clr=document.getElementById('btClearAll');
   if(clr) clr.addEventListener('click',()=>{
     if(!store.backtests.length) return;
