@@ -1333,7 +1333,10 @@ function btSimTrades(bts, capital, echelle){
       if(B<=0){ B=0; ruine=true; }
       if(B>pic) pic=B;
       const dd=pic>0?(pic-B)/pic*100:0; if(dd>mdd) mdd=dd;
-      const iso=new Date(e.t*1000).toISOString().slice(0,10), m=iso.slice(0,7);
+      // Date LOCALE, pas toISOString() (UTC) : un deal clôturé entre minuit et
+      // ~2 h glisserait sur le jour — voire le mois — précédent.
+      const dl=new Date(e.t*1000);
+      const iso=dl.getFullYear()+'-'+String(dl.getMonth()+1).padStart(2,'0')+'-'+String(dl.getDate()).padStart(2,'0'), m=iso.slice(0,7);
       if(!parMois[m]) parMois[m]={debut:avant,fin:B}; else parMois[m].fin=B;
       // un seul point par jour sur le graphique : le solde de clôture du jour
       if(iso!==jourCourant){ dates.push(iso); serie.push(round2(B)); jourCourant=iso; }
