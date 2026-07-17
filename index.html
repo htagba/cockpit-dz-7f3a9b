@@ -361,9 +361,9 @@
         <div id="btComboConform"></div>
         <div class="grid g4" id="btComboStats" style="margin-top:4px"></div>
         <canvas id="btComboChart" height="100" style="margin-top:16px"></canvas>
-        <h4 style="margin:20px 0 8px;font-size:13px;color:var(--muted)">Statistiques détaillées <span style="font-weight:400;color:var(--dim);font-size:11px">(rapport QuantAnalyzer)</span></h4>
+        <h4 style="margin:20px 0 8px;font-size:13px;color:var(--muted)">Statistiques détaillées</h4>
         <div class="grid g4" id="btComboStats2"></div>
-        <h4 style="margin:20px 0 8px;font-size:13px;color:var(--muted)">Performance mensuelle ($)</h4>
+        <h4 style="margin:20px 0 8px;font-size:13px;color:var(--muted)">Performance mensuelle ($) <span style="font-weight:400;color:var(--dim);font-size:11px">(calculée sur tes imports)</span></h4>
         <div id="btComboMonthly" style="overflow:auto"></div>
         <div class="help" style="margin-top:12px" id="btComboNote"></div>
       </div>
@@ -2207,57 +2207,82 @@ function renderBtCombo(){
   tag.className = 'tag '+(allIn?'g':'a');
 
   const conform=document.getElementById('btComboConform');
+  const legende='<div class="help" style="margin:8px 0 2px">Chaque tuile indique sa source : <span style="color:#7ee2a0;font-weight:600">calculé</span> = obtenu sur les trades de tes backtests importés · <span style="color:var(--dim);font-weight:600">réf. QA</span> = valeur du rapport QuantAnalyzer, non calculable depuis les seuls trades (elle nécessite les prix ou une base de capital).</div>';
   if(allIn){
-    conform.innerHTML='<div class="alert ok"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg><div><b>'+conf.nTotal+'/'+conf.nTotal+' sets du portefeuille importés.</b> Les statistiques ci-dessous reprennent le rapport QuantAnalyzer « Best Portfolio » (1 % de risque par trade) <b>à la virgule près</b>.</div></div>';
+    conform.innerHTML='<div class="alert ok"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg><div><b>'+conf.nTotal+'/'+conf.nTotal+' sets du portefeuille importés.</b> Les stats <b>calculées</b> ci-dessous sont obtenues sur tes trades et reproduisent le rapport QuantAnalyzer « Best Portfolio » (1 % par trade) à moins de 0,02 % près.</div></div>'+legende;
   } else {
-    conform.innerHTML='<div class="alert warn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div><b>'+conf.matched.length+'/'+conf.nTotal+' sets importés.</b> Les statistiques restent celles du rapport QuantAnalyzer (référence du portefeuille complet) ; la courbe ci-dessous ne trace que les sets importés. Sets manquants : '+conf.missing.map(s=>s.name).join(', ')+'.</div></div>'
-      +(conf.extra.length?'<div class="help" style="margin-bottom:8px">'+conf.extra.length+' backtest(s) hors portefeuille de référence : '+conf.extra.map(b=>b.name).join(', ')+'.</div>':'');
+    conform.innerHTML='<div class="alert warn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div><b>'+conf.matched.length+'/'+conf.nTotal+' sets importés.</b> Les stats <b>calculées</b> ne portent que sur les sets importés (elles ne correspondront au rapport qu\'une fois les 20 présents) ; les stats <b>réf. QA</b> décrivent le portefeuille complet. Sets manquants : '+conf.missing.map(s=>s.name).join(', ')+'.</div></div>'
+      +(conf.extra.length?'<div class="help" style="margin-bottom:4px">'+conf.extra.length+' backtest(s) hors portefeuille de référence : '+conf.extra.map(b=>b.name).join(', ')+'.</div>':'')+legende;
   }
 
-  // ---- synthèse (valeurs QuantAnalyzer, exactes) ----
-  const head=[
-    {lab:'Profit total', val:money(QA.totalProfit), cls:'pos', sub:QA.trades.toLocaleString('fr-FR')+' trades'},
-    {lab:'Rendement annuel moyen', val:pct(QA.yearlyAvgRet,2), cls:'pos', sub:'profit annuel moyen '+money0(QA.yearlyAvgProfit)},
-    {lab:'CAGR', val:pct(QA.cagr,2), cls:'pos', sub:'croissance annualisée'},
-    {lab:'Drawdown max', val:pct(QA.drawdownPct,2), cls:'warn', sub:money0(QA.drawdown)},
-    {lab:'Return / DD', val:fmt(QA.returnDD,2), cls:'pos', sub:'profit ÷ drawdown max'},
-    {lab:'Profit factor', val:fmt(QA.profitFactor,2), cls:'pos', sub:'gains ÷ pertes'},
-    {lab:'Sharpe ratio', val:fmt(QA.sharpe,2), sub:'rapport QuantAnalyzer'},
-    {lab:'Winning %', val:pct(QA.winningPct,2), cls:'pos', sub:QA.wins.toLocaleString('fr-FR')+' gagnants / '+QA.losses.toLocaleString('fr-FR')+' perdants'},
-    {lab:'Trade moyen', val:money(QA.avgTrade), cls:'pos', sub:'par trade'},
-    {lab:'Profit en pips', val:fmt(QA.profitPips,1)+' pips', cls:'pos'},
-    {lab:'SQN', val:fmt(QA.sqn,2), sub:'System Quality Number'},
-    {lab:'Espérance en R', val:fmt(QA.rExpectancy,2)+' R', cls:'pos', sub:'R Exp Score '+fmt(QA.rExpScore,2)}
-  ];
-  document.getElementById('btComboStats').innerHTML=head.map(statHTML).join('');
-
-  // ---- statistiques détaillées (valeurs QuantAnalyzer, exactes) ----
-  const det=[
-    {lab:'Profit brut', val:money(QA.grossProfit), cls:'pos'},
-    {lab:'Perte brute', val:money(QA.grossLoss), cls:'neg'},
-    {lab:'Trades gagnants', val:QA.wins.toLocaleString('fr-FR'), sub:'sur '+QA.trades.toLocaleString('fr-FR')},
-    {lab:'Trades perdants', val:QA.losses.toLocaleString('fr-FR')},
-    {lab:'Gain moyen', val:money(QA.avgWin), cls:'pos'},
-    {lab:'Perte moyenne', val:money(QA.avgLoss), cls:'neg'},
-    {lab:'Plus gros gain', val:money(QA.largestWin), cls:'pos'},
-    {lab:'Ratio de paiement', val:fmt(QA.payoutRatio,2), sub:'gain moy ÷ perte moy'},
-    {lab:'Ratio gains/pertes', val:fmt(QA.winsLossesRatio,2)},
-    {lab:'Profit quotidien moyen', val:money(QA.dailyAvg), cls:'pos'},
-    {lab:'Profit mensuel moyen', val:money(QA.monthlyAvg), cls:'pos'},
-    {lab:'Annuel % / MaxDD %', val:fmt(QA.annualMaxDD,2), sub:'ratio de robustesse'},
-    {lab:'Séries de pertes max', val:String(QA.maxConsecLosses), sub:'moy. '+fmt(QA.avgConsecLoss,2)+' · gains '+fmt(QA.avgConsecWins,2)},
-    {lab:'Z-Score', val:fmt(QA.zScore,2), sub:'Z-probabilité '+fmt(QA.zProbability,0)+' %'},
-    {lab:'Déviation', val:pct(QA.deviation,2)},
-    {lab:'AHPR', val:fmt(QA.ahpr,2), sub:'rendement moyen / trade'}
-  ];
-  document.getElementById('btComboStats2').innerHTML=det.map(statHTML).join('');
-
-  // ---- performance mensuelle ($) exacte ----
-  document.getElementById('btComboMonthly').innerHTML=moisGrilleHTML(QA.monthly);
-
-  // ---- courbe : profit cumulé reconstruit depuis les trades importés (modèle
-  //      additif lots fixes = celui de QuantAnalyzer) ----
+  // ---- calcul réel sur les trades des backtests importés (modèle additif lots
+  //      fixes = celui de QuantAnalyzer). C'est la SOURCE des stats dérivables. ----
   const add = btAdditif(bts);
+  const s = add ? btStatsQA(add.trades) : null;
+  // Périodes couvertes (pour les moyennes) et Return/DD, calculés depuis l'import.
+  let nMonths=0, spanYears=0, calDays=0;
+  if(add){
+    nMonths=Object.keys(add.parMois).length;
+    if(add.evs.length>1){
+      const span=add.evs[add.evs.length-1].t-add.evs[0].t;
+      spanYears=span/(365.25*24*3600);
+      calDays=Math.max(1, Math.round(span/(24*3600)));  // jours calendaires, comme QuantAnalyzer
+    }
+  }
+  const net = add ? add.net : QA.totalProfit;
+  const retDD = (add && add.mddAbs>0) ? net/add.mddAbs : null;
+
+  // Rendu d'une tuile avec marqueur de source : 'calc' (calculé sur tes imports)
+  // ou 'qa' (valeur du rapport, non calculable depuis les seuls trades).
+  const badge = src => src==='qa'
+    ? ' <span title="Valeur du rapport QuantAnalyzer — non calculable depuis les seuls trades" style="font-size:8.5px;font-weight:600;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:1px 4px;margin-left:5px;vertical-align:middle">réf. QA</span>'
+    : ' <span title="Calculé sur les trades de tes backtests importés" style="font-size:8.5px;font-weight:600;color:#7ee2a0;border:1px solid #1f4a2c;border-radius:4px;padding:1px 4px;margin-left:5px;vertical-align:middle">calculé</span>';
+  const tileHTML = c => `<div class="stat" style="background:var(--panel2)"><div class="lab">${c.lab}${badge(c.src)}</div><div class="val ${c.cls||''}" style="font-size:19px">${c.val}</div>${c.sub?`<div class="help">${c.sub}</div>`:''}</div>`;
+
+  // ---- synthèse (calculé sur l'import quand c'est dérivable, réf. QA sinon) ----
+  const head = s ? [
+    {src:'calc', lab:'Profit total', val:money(net), cls:'pos', sub:s.n.toLocaleString('fr-FR')+' trades'},
+    {src:'calc', lab:'Return / DD', val:retDD==null?'—':fmt(retDD,2), cls:'pos', sub:'profit ÷ drawdown $'},
+    {src:'calc', lab:'Drawdown max', val:money0(add.mddAbs), cls:'warn', sub:'soit '+pct(QA.drawdownPct,2)+' d\'un compte de '+money0(qaBaseCapital())},
+    {src:'calc', lab:'Profit factor', val:s.pf===Infinity?'∞':fmt(s.pf,2), cls:'pos', sub:'gains ÷ pertes'},
+    {src:'calc', lab:'Winning %', val:pct(s.winRate,2), cls:'pos', sub:s.wins.toLocaleString('fr-FR')+' gagnants / '+s.losses.toLocaleString('fr-FR')+' perdants'},
+    {src:'calc', lab:'Trade moyen', val:money(s.expectancy), cls:s.expectancy>=0?'pos':'neg', sub:'espérance par trade'},
+    {src:'calc', lab:'SQN', val:s.sqnQA==null?'—':fmt(s.sqnQA,2), sub:'System Quality Number'},
+    {src:'qa', lab:'Espérance en R', val:fmt(QA.rExpectancy,2)+' R', cls:'pos', sub:'R Exp Score '+fmt(QA.rExpScore,2)},
+    {src:'qa', lab:'CAGR', val:pct(QA.cagr,2), cls:'pos', sub:'croissance annualisée'},
+    {src:'qa', lab:'Sharpe ratio', val:fmt(QA.sharpe,2), sub:'méthode QuantAnalyzer'},
+    {src:'qa', lab:'Rendement annuel moyen', val:pct(QA.yearlyAvgRet,2), cls:'pos', sub:'base capital QuantAnalyzer'},
+    {src:'qa', lab:'Profit en pips', val:fmt(QA.profitPips,1)+' pips', cls:'pos', sub:'nécessite les prix'}
+  ] : [];
+  document.getElementById('btComboStats').innerHTML=head.map(tileHTML).join('');
+
+  // ---- statistiques détaillées ----
+  const det = s ? [
+    {src:'calc', lab:'Profit brut', val:money(s.gp), cls:'pos'},
+    {src:'calc', lab:'Perte brute', val:money(s.gl), cls:'neg'},
+    {src:'calc', lab:'Trades gagnants', val:s.wins.toLocaleString('fr-FR'), sub:'sur '+s.n.toLocaleString('fr-FR')},
+    {src:'calc', lab:'Trades perdants', val:s.losses.toLocaleString('fr-FR')},
+    {src:'calc', lab:'Gain moyen', val:money(s.avgWin), cls:'pos'},
+    {src:'calc', lab:'Perte moyenne', val:money(s.avgLoss), cls:'neg'},
+    {src:'calc', lab:'Plus gros gain', val:money(s.largestWin), cls:'pos'},
+    {src:'calc', lab:'Plus grosse perte', val:money(s.largestLoss), cls:'neg'},
+    {src:'calc', lab:'Ratio de paiement', val:s.payout==null?'—':fmt(s.payout,2), sub:'gain moy ÷ perte moy'},
+    {src:'calc', lab:'Ratio gains/pertes', val:s.losses?fmt(s.wins/s.losses,2):'∞'},
+    {src:'calc', lab:'Séries gains / pertes max', val:s.maxConsecWin+' / '+s.maxConsecLoss, sub:'trades consécutifs'},
+    {src:'calc', lab:'Profit quotidien moyen', val:calDays?money(net/calDays):'—', cls:'pos', sub:calDays.toLocaleString('fr-FR')+' jours (calendaires)'},
+    {src:'calc', lab:'Profit mensuel moyen', val:nMonths?money(net/nMonths):'—', cls:'pos', sub:nMonths+' mois'},
+    {src:'calc', lab:'Profit annuel moyen', val:spanYears>0?money(net/spanYears):'—', cls:'pos', sub:fmt(spanYears,1)+' ans couverts'},
+    {src:'qa', lab:'Déviation', val:pct(QA.deviation,2), sub:'écart-type des rendements'},
+    {src:'qa', lab:'Z-Score', val:fmt(QA.zScore,2), sub:'Z-probabilité '+fmt(QA.zProbability,0)+' %'},
+    {src:'qa', lab:'AHPR', val:fmt(QA.ahpr,2), sub:'rendement moyen / trade'},
+    {src:'qa', lab:'Annuel % / MaxDD %', val:fmt(QA.annualMaxDD,2), sub:'ratio de robustesse'}
+  ] : [];
+  document.getElementById('btComboStats2').innerHTML=det.map(tileHTML).join('');
+
+  // ---- performance mensuelle ($) : calculée depuis l'import ----
+  document.getElementById('btComboMonthly').innerHTML = add ? moisGrilleHTML(parMoisToAnnees(add.parMois)) : moisGrilleHTML(QA.monthly);
+
+  // ---- courbe : profit cumulé reconstruit depuis les trades importés ----
   const simCurve = add ? simFromAdditif(add, 0) : null;
   const cvCombo=document.getElementById('btComboChart');
   if(simCurve && simCurve.dates.length){
@@ -2269,8 +2294,9 @@ function renderBtCombo(){
 
   const note=document.getElementById('btComboNote');
   if(note){
-    note.innerHTML='Chiffres issus du rapport <b>QuantAnalyzer « Best Portfolio »</b> : les 20 sets fusionnés sur un compte unique, <b>lots d\'origine (1 % par trade), sans intérêts composés</b> — la convention de QuantAnalyzer. La courbe ci-dessus est le profit cumulé reconstruit depuis les trades des backtests importés'
-      +(allIn?' : elle reproduit le rapport à la virgule près.':', limitée aux sets déjà importés.')
+    note.innerHTML='Les stats <b>calculées</b> fusionnent les trades de tes '+conf.matched.length+' set(s) importé(s) sur un compte unique, <b>lots d\'origine (1 % par trade), sans intérêts composés</b> — la convention de QuantAnalyzer. Profit, drawdown $, gagnants/perdants, profit factor, séries… sont donc de vrais calculs sur tes données'
+      +(allIn?', qui retombent sur le rapport à moins de 0,02 % près.':' (limités aux sets présents pour l\'instant).')
+      +' Les tuiles <b>réf. QA</b> (Sharpe, CAGR, rendement %, pips…) restent celles du rapport car elles exigent les prix ou une base de capital absente des relevés de trades.'
       +'<br>⚠ <b>Projection, pas une promesse.</b> Les backtests supposent que chaque set se comporte à l\'avenir comme dans le passé — ce que rien ne garantit. Les analyses ci-dessous (ratios, Monte Carlo, drawdowns) rejouent ce même portefeuille.';
   }
 
