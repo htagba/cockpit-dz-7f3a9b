@@ -100,6 +100,18 @@
   .tag.r{background:var(--red-soft);color:#ff9b95}
   details{margin-top:10px}
   summary{cursor:pointer;font-size:12px;color:var(--muted)}
+  /* Sections repliables : une <details> qui garde l'aspect d'une .card */
+  details.card{padding:0}
+  details.card>summary{list-style:none;cursor:pointer;user-select:none;padding:18px;display:flex;align-items:center;gap:10px;border-radius:var(--radius)}
+  details.card>summary::-webkit-details-marker{display:none}
+  details.card>summary::marker{content:''}
+  details.card>summary:hover{background:var(--panel2)}
+  details.card>summary>h3{margin:0!important;flex:1}
+  /* chevron maison : pointe en bas fermé, en haut ouvert */
+  details.card>summary::after{content:'';flex:none;width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s}
+  details.card[open]>summary::after{transform:rotate(-135deg) translate(-2px,-2px)}
+  details.card[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0}
+  .sect-body{padding:0 18px 18px}
   pre{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:var(--mono);font-size:11px;overflow:auto;max-height:240px;margin-top:8px;color:var(--muted)}
   .foot{margin-top:30px;font-size:11px;color:var(--dim);text-align:center;line-height:1.7}
   .dz{border:2px dashed var(--border);border-radius:var(--radius);padding:26px;text-align:center;color:var(--muted);font-size:13px;cursor:pointer}
@@ -332,62 +344,75 @@
           <option value="0.1">0,1 % — ÷10</option>
         </select>
       </label>
+      <button class="ghost sm" id="btToggleAll" title="Replier ou déplier toutes les sections">Tout replier</button>
       <button class="ghost sm" id="btPublier" title="Génère backtests.json à déposer sur GitHub : tes autres appareils le chargeront tout seuls"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Publier les backtests</button>
       <button class="ghost sm" id="btClearAll" style="border-color:var(--red);color:var(--red)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>Tout effacer</button>
     </div>
 
-    <div class="card" style="margin-top:14px" id="btAllCard">
-      <h3>Courbes de tous les backtests <span style="font-weight:400;color:var(--dim);font-size:11px">(clique un nom dans la légende pour l'afficher/masquer)</span></h3>
-      <canvas id="btAllChart" height="120"></canvas>
-    </div>
-
-    <details id="btListWrap" style="margin-top:14px">
-      <summary style="cursor:pointer;padding:11px 14px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-weight:500;color:var(--text);user-select:none">Détail et réglages de chaque backtest</summary>
-      <div id="btList" style="margin-top:10px"></div>
+    <details class="card" data-sect="btAll" id="btAllCard" style="margin-top:14px" open>
+      <summary><h3>Courbes de tous les backtests <span style="font-weight:400;color:var(--dim);font-size:11px">(clique un nom dans la légende pour l'afficher/masquer)</span></h3></summary>
+      <div class="sect-body"><canvas id="btAllChart" height="120"></canvas></div>
     </details>
 
-    <div class="card" style="margin-top:14px" id="btComboCard">
-      <h3>Portefeuille combiné <span id="btComboMeta" style="font-weight:400;color:var(--dim);font-size:11px"></span></h3>
-      <canvas id="btComboChart" height="100"></canvas>
-      <div class="grid g4" id="btComboStats" style="margin-top:14px"></div>
-      <div class="help" style="margin-top:10px" id="btComboNote"></div>
-    </div>
+    <details class="card" data-sect="btList" id="btListWrap" style="margin-top:14px">
+      <summary><h3>Détail et réglages de chaque backtest</h3></summary>
+      <div class="sect-body"><div id="btList"></div></div>
+    </details>
 
-    <div class="card" style="margin-top:14px" id="btRatiosCard">
-      <h3 style="margin-bottom:4px">Ratios de qualité <span class="tag a" id="btRatiosTag">—</span></h3>
-      <div class="help" style="margin-bottom:10px">Mesurés sur le compte unique simulé, au risque choisi ci-dessus. Ils permettent de comparer ce portefeuille aux standards du métier.</div>
-      <div class="grid g4" id="btRatiosStats"></div>
-      <div class="help" style="margin-top:10px" id="btRatiosNote"></div>
-    </div>
-
-    <div class="card" style="margin-top:14px" id="btMCCard">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <h3 style="margin:0">Monte Carlo <span class="tag a" id="btMCTag">—</span></h3>
-        <button class="ghost sm" id="btMCRun">Relancer le tirage</button>
+    <details class="card" data-sect="btCombo" id="btComboCard" style="margin-top:14px" open>
+      <summary><h3>Portefeuille combiné <span id="btComboMeta" style="font-weight:400;color:var(--dim);font-size:11px"></span></h3></summary>
+      <div class="sect-body">
+        <canvas id="btComboChart" height="100"></canvas>
+        <div class="grid g4" id="btComboStats" style="margin-top:14px"></div>
+        <div class="help" style="margin-top:10px" id="btComboNote"></div>
       </div>
-      <div class="help" style="margin:6px 0 10px">Le passé n'a produit qu'<b>une</b> séquence de trades parmi une infinité de possibles. On rejoue ici le portefeuille des milliers de fois en retirant au hasard ses journées, pour voir ce que le hasard seul aurait pu donner.</div>
-      <div class="grid g4" id="btMCStats"></div>
-      <canvas id="btMCChart" height="90" style="margin-top:14px"></canvas>
-      <div class="help" style="margin-top:8px" id="btMCNote"></div>
-    </div>
+    </details>
 
-    <div class="card" style="margin-top:14px" id="btDDCard">
-      <h3 style="margin-bottom:4px">Analyse des drawdowns <span class="tag a" id="btDDTag">—</span></h3>
-      <div class="help" style="margin-bottom:10px">Chaque creux entre deux sommets du compte : sa profondeur, sa durée, et le temps qu'il a fallu pour revenir au sommet précédent. Répond à « combien de temps resterais-je dans le rouge ? ».</div>
-      <div class="grid g4" id="btDDStats"></div>
-      <div id="btDDTable" style="margin-top:14px"></div>
-    </div>
+    <details class="card" data-sect="btRatios" id="btRatiosCard" style="margin-top:14px" open>
+      <summary><h3>Ratios de qualité <span class="tag a" id="btRatiosTag">—</span></h3></summary>
+      <div class="sect-body">
+        <div class="help" style="margin-bottom:10px">Mesurés sur le compte unique simulé, au risque choisi ci-dessus. Ils permettent de comparer ce portefeuille aux standards du métier.</div>
+        <div class="grid g4" id="btRatiosStats"></div>
+        <div class="help" style="margin-top:10px" id="btRatiosNote"></div>
+      </div>
+    </details>
 
-    <div class="card" style="margin-top:14px" id="btCorrCard">
-      <h3 style="margin-bottom:4px">Corrélation des sets du portefeuille <span class="tag a" id="btCorrTag">—</span></h3>
-      <div class="help" style="margin-bottom:10px">Calculée sur les gains/pertes <b>quotidiens</b> des backtests, sur leur période commune. Proche de 0 = sets indépendants (bonne diversification). Proche de 1 = ils gagnent et perdent ensemble (drawdowns cumulés).</div>
-      <div id="btCorrMatrix"></div>
-    </div>
+    <details class="card" data-sect="btMC" id="btMCCard" style="margin-top:14px" open>
+      <summary><h3>Monte Carlo <span class="tag a" id="btMCTag">—</span></h3></summary>
+      <div class="sect-body">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+          <div class="help" style="margin:0;flex:1;min-width:260px">Le passé n'a produit qu'<b>une</b> séquence de trades parmi une infinité de possibles. On rejoue ici le portefeuille des milliers de fois en retirant au hasard ses journées, pour voir ce que le hasard seul aurait pu donner.</div>
+          <button class="ghost sm" id="btMCRun" style="flex:none">Relancer le tirage</button>
+        </div>
+        <div class="grid g4" id="btMCStats"></div>
+        <canvas id="btMCChart" height="90" style="margin-top:14px"></canvas>
+        <div class="help" style="margin-top:8px" id="btMCNote"></div>
+      </div>
+    </details>
 
-    <div class="card" style="margin-top:14px" id="btCmpCard">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <h3 style="margin:0">Live réel vs référence backtest</h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <details class="card" data-sect="btDD" id="btDDCard" style="margin-top:14px" open>
+      <summary><h3>Analyse des drawdowns <span class="tag a" id="btDDTag">—</span></h3></summary>
+      <div class="sect-body">
+        <div class="help" style="margin-bottom:10px">Chaque creux entre deux sommets du compte : sa profondeur, sa durée, et le temps qu'il a fallu pour revenir au sommet précédent. Répond à « combien de temps resterais-je dans le rouge ? ».</div>
+        <div class="grid g4" id="btDDStats"></div>
+        <div id="btDDTable" style="margin-top:14px"></div>
+      </div>
+    </details>
+
+    <details class="card" data-sect="btCorr" id="btCorrCard" style="margin-top:14px" open>
+      <summary><h3>Corrélation des sets du portefeuille <span class="tag a" id="btCorrTag">—</span></h3></summary>
+      <div class="sect-body">
+        <div class="help" style="margin-bottom:10px">Calculée sur les gains/pertes <b>quotidiens</b> des backtests, sur leur période commune. Proche de 0 = sets indépendants (bonne diversification). Proche de 1 = ils gagnent et perdent ensemble (drawdowns cumulés).</div>
+        <div id="btCorrMatrix"></div>
+      </div>
+    </details>
+
+    <details class="card" data-sect="btCmp" id="btCmpCard" style="margin-top:14px" open>
+      <summary><h3>Live réel vs référence backtest</h3></summary>
+      <div class="sect-body">
+        <!-- Les sélecteurs sont DANS le corps, pas dans le <summary> : un clic
+             dessus replierait la section. -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-bottom:4px">
           <select id="btPeriod" style="width:auto">
             <option value="full">Historique complet</option>
             <option value="sincelive">Depuis le live</option>
@@ -398,10 +423,10 @@
             <option value="raw">% réels bruts (1 %)</option>
           </select>
         </div>
+        <canvas id="btCmpChart" height="110" style="margin-top:10px"></canvas>
+        <div id="btCmpNote" class="help" style="margin-top:8px"></div>
       </div>
-      <canvas id="btCmpChart" height="110" style="margin-top:10px"></canvas>
-      <div id="btCmpNote" class="help" style="margin-top:8px"></div>
-    </div>
+    </details>
   </div>
 
   <!-- JOURNAL -->
@@ -1490,6 +1515,48 @@ function btSimResultat(dates,serie,capital,B,mdd,ruine,parMois,precision,retsTra
 
 let btSimCourante=null;   // dernière simulation compte unique, partagée par les analyses
 
+/* ---------- sections repliables de l'onglet Backtests ----------
+   Un graphique dessiné dans une section fermée ne connaît pas la largeur qu'il
+   aura une fois dépliée. On le force à se remesurer à la réouverture — mais après
+   que le navigateur a recalculé la mise en page : appelé dans le handler `toggle`,
+   le contenu n'est pas encore positionné et la mesure serait celle d'avant.
+   D'où les deux requestAnimationFrame. */
+function redimGraphiques(racine){
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    (racine||document).querySelectorAll('canvas').forEach(c=>{
+      if(c._chart){ try{ c._chart.resize(); }catch(e){} }
+    });
+  }));
+}
+function sections(){ return [...document.querySelectorAll('details[data-sect]')]; }
+function majToggleAll(){
+  const b=document.getElementById('btToggleAll'); if(!b) return;
+  const ds=sections();
+  b.textContent = ds.filter(d=>d.open).length > ds.length/2 ? 'Tout replier' : 'Tout déplier';
+}
+function initSections(){
+  const etat=store.btSections||{};
+  sections().forEach(d=>{
+    const k=d.dataset.sect;
+    if(k in etat) d.open=!!etat[k];
+    d.addEventListener('toggle',()=>{
+      store.btSections=store.btSections||{};
+      store.btSections[k]=d.open;
+      saveStore(store);
+      if(d.open) redimGraphiques(d);
+      majToggleAll();
+    });
+  });
+  const b=document.getElementById('btToggleAll');
+  if(b) b.addEventListener('click',()=>{
+    const ds=sections();
+    const ouvrir = ds.filter(d=>d.open).length <= ds.length/2;
+    ds.forEach(d=>{ d.open=ouvrir; });   // déclenche 'toggle' : sauvegarde + redimensionnement
+    majToggleAll();
+  });
+  majToggleAll();
+}
+
 /* Fabrique une tuile de stat (même gabarit que les cartes du portefeuille). */
 function statHTML(c){
   return `<div class="stat" style="background:var(--panel2)"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}" style="font-size:19px">${c.val}</div>${c.sub?`<div class="help">${c.sub}</div>`:''}</div>`;
@@ -2033,6 +2100,7 @@ document.getElementById('btnRefresh').addEventListener('click',()=>{ if(SERVER_M
   document.getElementById('setDdMax').value=store.settings.ddMax;
   majLibellesRisque();
   calcLot();
+  initSections();
   // Backtests publiés : à charger AVANT le premier rendu, sinon l'onglet
   // s'afficherait vide puis se remplirait d'un coup.
   const pub=await chargerBacktestsPublies();
