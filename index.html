@@ -350,6 +350,31 @@
       <div class="help" style="margin-top:10px" id="btComboNote"></div>
     </div>
 
+    <div class="card" style="margin-top:14px" id="btRatiosCard">
+      <h3 style="margin-bottom:4px">Ratios de qualité <span class="tag a" id="btRatiosTag">—</span></h3>
+      <div class="help" style="margin-bottom:10px">Mesurés sur le compte unique simulé, au risque choisi ci-dessus. Ils permettent de comparer ce portefeuille aux standards du métier.</div>
+      <div class="grid g4" id="btRatiosStats"></div>
+      <div class="help" style="margin-top:10px" id="btRatiosNote"></div>
+    </div>
+
+    <div class="card" style="margin-top:14px" id="btMCCard">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">Monte Carlo <span class="tag a" id="btMCTag">—</span></h3>
+        <button class="ghost sm" id="btMCRun">Relancer le tirage</button>
+      </div>
+      <div class="help" style="margin:6px 0 10px">Le passé n'a produit qu'<b>une</b> séquence de trades parmi une infinité de possibles. On rejoue ici le portefeuille des milliers de fois en retirant au hasard ses journées, pour voir ce que le hasard seul aurait pu donner.</div>
+      <div class="grid g4" id="btMCStats"></div>
+      <canvas id="btMCChart" height="90" style="margin-top:14px"></canvas>
+      <div class="help" style="margin-top:8px" id="btMCNote"></div>
+    </div>
+
+    <div class="card" style="margin-top:14px" id="btDDCard">
+      <h3 style="margin-bottom:4px">Analyse des drawdowns <span class="tag a" id="btDDTag">—</span></h3>
+      <div class="help" style="margin-bottom:10px">Chaque creux entre deux sommets du compte : sa profondeur, sa durée, et le temps qu'il a fallu pour revenir au sommet précédent. Répond à « combien de temps resterais-je dans le rouge ? ».</div>
+      <div class="grid g4" id="btDDStats"></div>
+      <div id="btDDTable" style="margin-top:14px"></div>
+    </div>
+
     <div class="card" style="margin-top:14px" id="btCorrCard">
       <h3 style="margin-bottom:4px">Corrélation des sets du portefeuille <span class="tag a" id="btCorrTag">—</span></h3>
       <div class="help" style="margin-bottom:10px">Calculée sur les gains/pertes <b>quotidiens</b> des backtests, sur leur période commune. Proche de 0 = sets indépendants (bonne diversification). Proche de 1 = ils gagnent et perdent ensemble (drawdowns cumulés).</div>
@@ -1020,13 +1045,18 @@ function btPositions(trades){
   return pos.length?pos:null;
 }
 
-/* Deals horodatés [seconde epoch, P&L] pour rejouer le portefeuille au trade près.
-   On garde les DEALS et non les positions : c'est ainsi que MT5 fait bouger le
-   solde, et ça reste juste même avec des clôtures partielles. */
+/* Deals horodatés [seconde epoch, P&L, sortie?] pour rejouer le portefeuille au
+   trade près. On garde les DEALS et non les positions : c'est ainsi que MT5 fait
+   bouger le solde, et ça reste juste même avec des clôtures partielles.
+
+   3e champ : 1 = deal de SORTIE (un « trade » au sens MT5), 0 = entrée.
+   Nécessaire au SQN, qui se mesure par trade : mélanger les entrées (qui ne
+   portent qu'une commission) écraserait l'écart-type. Les imports antérieurs
+   n'ont que 2 champs — le code doit rester tolérant. */
 function btDeals(trades){
   const d=trades.filter(t=>t.dt!=null)
     .sort((a,b)=>a.dt-b.dt)
-    .map(t=>[Math.round(t.dt/1000), Math.round(t.profit*100)/100]);
+    .map(t=>[Math.round(t.dt/1000), Math.round(t.profit*100)/100, t.isClose?1:0]);
   return d.length?d:null;
 }
 
@@ -1096,6 +1126,15 @@ function makeLineChart(cv, labels, datasets, unit, fmtVal){
   cv._chart=new Chart(cv,{type:'line',data:{labels,datasets},options:{plugins:{legend:{display:datasets.length>1,labels:{color:'#8b95a5',boxWidth:12}},tooltip:{callbacks:{label:c=>c.dataset.label?`${c.dataset.label}: ${f(c.parsed.y)}`:f(c.parsed.y)}}},scales:{x:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',maxTicksLimit:8}},y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',callback:v=>f(v)}}}}});
 }
 function btCumul(days, deposit){ let run=0; const L=[],D=[]; days.forEach(([d,pnl])=>{run+=pnl/deposit*100; L.push(d); D.push(round2(run));}); return {L,D}; }
+/* Histogramme (Chart.js type bar) — sert à la distribution Monte Carlo. */
+function makeBarChart(cv, labels, data, couleurs, fmtVal){
+  const f = fmtVal || (v=>v);
+  if(cv._chart)cv._chart.destroy();
+  cv._chart=new Chart(cv,{type:'bar',data:{labels,datasets:[{data,backgroundColor:couleurs,borderWidth:0}]},
+    options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>f(c.parsed.y)+' tirages'}}},
+      scales:{x:{grid:{display:false},ticks:{color:'#5c6675',maxTicksLimit:10}},
+              y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675'}}}}});
+}
 
 // Détecte le magic du set live correspondant à un backtest, d'après son nom.
 function autoMagic(name){
@@ -1123,7 +1162,9 @@ function renderBacktests(a){
     document.getElementById('btComboCard').style.display='none'; document.getElementById('btAllCard').style.display='none';
     const wrapE=document.getElementById('btListWrap'); if(wrapE) wrapE.style.display='none';
     if(tb) tb.style.display='none';
-    ['btAllChart','btComboChart'].forEach(id=>{const c=document.getElementById(id); if(c&&c._chart){c._chart.destroy();c._chart=null;}});
+    ['btAllChart','btComboChart','btMCChart'].forEach(id=>{const c=document.getElementById(id); if(c&&c._chart){c._chart.destroy();c._chart=null;}});
+    ['btRatiosCard','btMCCard','btDDCard'].forEach(id=>{const e=document.getElementById(id); if(e)e.style.display='none';});
+    btSimCourante=null;
     renderBtCorr(); renderBtCompare(a); return;
   }
   const wrap=document.getElementById('btListWrap'); if(wrap) wrap.style.display='block';
@@ -1318,18 +1359,22 @@ function btSimuleCompteUnique(bts, capital, echelle){
    clôture en plusieurs fois. Le drawdown suit la courbe de solde au trade près. */
 function btSimTrades(bts, capital, echelle){
   const evs=[];
-  bts.forEach((b,i)=>{ b.deals.forEach(d=>evs.push({t:d[0], s:i, pnl:d[1]})); });
+  // d[2] : 1 = deal de sortie (un « trade »). Absent sur les imports antérieurs.
+  bts.forEach((b,i)=>{ b.deals.forEach(d=>evs.push({t:d[0], s:i, pnl:d[1], out:d.length>2?d[2]:null})); });
   evs.sort((a,b)=>a.t-b.t);
   const solde=bts.map(b=>Number(b.deposit)||capital);
   let B=capital, pic=capital, mdd=0, ruine=false;
   const dates=[], serie=[], parMois={};
+  const retsTrades=[];   // rendement de chaque trade sur le compte commun (pour le SQN)
   let jourCourant=null;
   evs.forEach(e=>{
     if(ruine) return;
     const s=solde[e.s];
     if(s>0){
       const avant=B;
-      B=B*(1+(e.pnl/s)*echelle);
+      const r=(e.pnl/s)*echelle;
+      if(e.out===1) retsTrades.push(r);
+      B=B*(1+r);
       if(B<=0){ B=0; ruine=true; }
       if(B>pic) pic=B;
       const dd=pic>0?(pic-B)/pic*100:0; if(dd>mdd) mdd=dd;
@@ -1344,7 +1389,7 @@ function btSimTrades(bts, capital, echelle){
     }
     solde[e.s]+=e.pnl;
   });
-  return btSimResultat(dates,serie,capital,B,mdd,ruine,parMois,'trade');
+  return btSimResultat(dates,serie,capital,B,mdd,ruine,parMois,'trade',retsTrades);
 }
 
 /* Repli : P&L agrégé par jour. Sous-estime légèrement le drawdown (les creux
@@ -1376,12 +1421,261 @@ function btSimJours(bts, capital, echelle){
   return btSimResultat(dates,serie,capital,B,mdd,ruine,parMois,'jour');
 }
 
-function btSimResultat(dates,serie,capital,B,mdd,ruine,parMois,precision){
+function btSimResultat(dates,serie,capital,B,mdd,ruine,parMois,precision,retsTrades){
   const mois=Object.keys(parMois);
   const moisPos=mois.filter(m=>parMois[m].fin>parMois[m].debut).length;
   return { dates, serie, capital, final:B, mdd, ruine, precision,
+           retsTrades: (retsTrades && retsTrades.length) ? retsTrades : null,
            rendement: capital>0?(B-capital)/capital*100:0,
            mois:mois.length, moisPos, moisPositifs: mois.length?moisPos/mois.length*100:0 };
+}
+
+let btSimCourante=null;   // dernière simulation compte unique, partagée par les analyses
+
+/* Fabrique une tuile de stat (même gabarit que les cartes du portefeuille). */
+function statHTML(c){
+  return `<div class="stat" style="background:var(--panel2)"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}" style="font-size:19px">${c.val}</div>${c.sub?`<div class="help">${c.sub}</div>`:''}</div>`;
+}
+
+/* ---------- rendu : ratios de qualité ---------- */
+function renderBtRatios(sim){
+  const card=document.getElementById('btRatiosCard'); if(!card) return;
+  const el=document.getElementById('btRatiosStats'), tag=document.getElementById('btRatiosTag'), note=document.getElementById('btRatiosNote');
+  const R=sim?btRatios(sim):null;
+  if(!R){ card.style.display='none'; return; }
+  card.style.display='block';
+  // Repères usuels du métier (Sharpe > 1 bon, > 2 excellent ; SQN Van Tharp).
+  const q=(v,bon,exc)=> v==null?'':(v>=exc?'pos':v>=bon?'':'warn');
+  const cards=[
+    {lab:'CAGR', val:R.cagr==null?'—':pct(R.cagr,1), cls:R.cagr>=0?'pos':'neg', sub:'rendement annualisé sur '+fmt(R.ans,1)+' ans'},
+    {lab:'Sharpe', val:R.sharpe==null?'—':fmt(R.sharpe,2), cls:q(R.sharpe,1,2), sub:'&gt; 1 bon · &gt; 2 excellent'},
+    {lab:'Sortino', val:R.sortino==null?'—':fmt(R.sortino,2), cls:q(R.sortino,1.5,3), sub:'comme Sharpe, mais ignore la volatilité à la hausse'},
+    {lab:'MAR / Calmar', val:R.mar==null?'—':fmt(R.mar,2), cls:q(R.mar,0.5,1), sub:'CAGR ÷ drawdown max'},
+    {lab:'SQN', val:R.sqn==null?'—':fmt(R.sqn,2), cls:q(R.sqn,2,3),
+     sub:R.sqn==null?'réimporte tes backtests pour l\'obtenir':'Van Tharp · &gt; 2 correct · &gt; 3 bon · &gt; 5 excellent'},
+    {lab:'Jours de trading', val:R.jparAn?fmt(R.jparAn,0)+' / an':'—', sub:sim.serie.length+' jours au total'},
+    {lab:'Trades', val:R.nTrades?R.nTrades.toLocaleString('fr-FR'):'—', sub:R.nTrades?'sur le compte commun':''},
+    {lab:'Drawdown max', val:pct(sim.mdd,1), cls:'warn', sub:'référence des ratios ci-dessus'}
+  ];
+  el.innerHTML=cards.map(statHTML).join('');
+  // Un MAR > 3 est hors du domaine du plausible : le signaler prime sur un Sharpe
+  // flatteur, sinon la tuile afficherait « excellent » à côté d'une alerte rouge.
+  const s=R.sharpe, invraisemblable = R.mar!=null && R.mar>3;
+  tag.textContent = invraisemblable ? 'trop beau' : (s==null?'—':(s>=2?'excellent':s>=1?'bon':'faible'));
+  tag.className='tag '+(invraisemblable?'r':(s==null?'a':(s>=2?'g':s>=1?'a':'r')));
+  let t='';
+  if(invraisemblable) t+='🔴 <b>Un MAR de '+fmt(R.mar,1)+' n\'existe pas dans le monde réel.</b> Les meilleurs fonds tournent autour de 0,5 à 1'
+    +(s>=3?', avec un Sharpe rarement au-dessus de 2 — le tien affiche '+fmt(s,1)+'':'')
+    +'. De tels chiffres signalent presque toujours des backtests trop ajustés à leur historique (sur-optimisation).'
+    +'<br><b>Le Monte Carlo ci-dessous ne tranchera pas</b> : il rejoue ces mêmes journées et hérite donc du même biais. Seules des données jamais vues le peuvent — c\'est exactement le rôle de ton compte réel, qui vient de démarrer.';
+  else if(R.mar!=null) t+='Repère : les très bons fonds affichent un MAR de 0,5 à 1.';
+  note.innerHTML=t;
+}
+
+/* ---------- rendu : Monte Carlo ---------- */
+let btMCDernier=null;
+function renderBtMC(sim){
+  const card=document.getElementById('btMCCard'); if(!card) return;
+  const el=document.getElementById('btMCStats'), tag=document.getElementById('btMCTag'), note=document.getElementById('btMCNote');
+  const cv=document.getElementById('btMCChart');
+  const MC=sim?btMonteCarlo(sim,3000):null;
+  btMCDernier=MC;
+  if(!MC){ card.style.display='none'; if(cv&&cv._chart){cv._chart.destroy();cv._chart=null;} return; }
+  card.style.display='block';
+  const cap=sim.capital, money0=n=>fmt(n,0)+' $';
+  const cards=[
+    {lab:'Balance médiane', val:money0(MC.multMed*cap), cls:MC.multMed>=1?'pos':'neg', sub:'le tirage typique'},
+    {lab:'Pire 5 %', val:money0(MC.mult05*cap), cls:MC.mult05>=1?'warn':'neg', sub:'5 % des tirages font moins bien'},
+    {lab:'Meilleur 5 %', val:money0(MC.mult95*cap), cls:'pos', sub:'5 % des tirages font mieux'},
+    {lab:'Probabilité de perte', val:pct(MC.probPerte,1), cls:MC.probPerte<=5?'pos':MC.probPerte<=20?'warn':'neg', sub:'tirages finissant sous le capital'},
+    {lab:'Drawdown médian', val:pct(MC.ddMed,1), cls:'warn', sub:'réalisé (même base) : '+pct(MC.ddHist,1)},
+    {lab:'Drawdown au 95e centile', val:pct(MC.dd95,1), cls:'neg', sub:'⚠ 1 tirage sur 20 fait pire'},
+    {lab:'Pire drawdown observé', val:pct(MC.ddPire,1), cls:'neg', sub:'sur '+MC.nSim.toLocaleString('fr-FR')+' tirages'},
+    {lab:'Tirages', val:MC.nSim.toLocaleString('fr-FR'), sub:MC.n+' jours rejoués à chaque fois'}
+  ];
+  el.innerHTML=cards.map(statHTML).join('');
+
+  // histogramme des drawdowns : c'est LA distribution qui compte pour le risque
+  const bins=30, min=MC.dds[0], max=MC.dds[MC.nSim-1], pas=(max-min)/bins || 1;
+  const compte=new Array(bins).fill(0);
+  for(let i=0;i<MC.nSim;i++){ const b=Math.min(bins-1, Math.floor((MC.dds[i]-min)/pas)); compte[b]++; }
+  const labels=compte.map((_,i)=>fmt(min+i*pas,1)+' %');
+  const couleurs=compte.map((_,i)=>{ const v=min+i*pas; return v>=MC.dd95?'#f85149':(v>=MC.ddMed?'#d29922':'#2ea043'); });
+  makeBarChart(cv, labels, compte, couleurs);
+
+  // Comparaison à base identique (quotidienne) : MC.ddHist, pas sim.mdd (mesuré au deal).
+  const ratio = MC.ddHist>0 ? MC.dd95/MC.ddHist : 0;
+  // Tag volontairement DESCRIPTIF, pas un verdict : dire « robuste » laisserait croire
+  // que le test valide la stratégie, alors qu'il ne juge que l'effet de l'ordre des jours.
+  tag.textContent = ratio>=2?'très dispersé':ratio>=1.5?'dispersé':'peu dispersé';
+  tag.className='tag '+(ratio>=2?'r':ratio>=1.5?'a':'g');
+  note.innerHTML='Histogramme des drawdowns simulés (vert = sous la médiane, rouge = au-delà du 95e centile). '
+    +'<b>Lecture :</b> ton backtest a connu '+pct(MC.ddHist,1)+' de drawdown, mais le hasard seul, sur les mêmes journées, en produit '
+    +pct(MC.dd95,1)+' dans 1 cas sur 20'+(ratio>=1.5?(' — soit '+fmt(ratio,1)+'× pire que ce que tu as vu. Dimensionne ton risque sur ce chiffre, pas sur le drawdown historique.'):'.')
+    +'<br>🔴 <b>Un résultat « peu dispersé » ne valide PAS la stratégie.</b> Ce test rejoue <i>tes</i> journées : si les backtests sont sur-optimisés, leurs journées le sont aussi et le Monte Carlo le sera tout autant. Il répond à « et si j\'avais eu moins de chance dans l\'ordre des trades ? », pas à « cet avantage est-il réel ? ».'
+    +'<br>⚠ Autre limite : en rebattant les cartes, il suppose les journées indépendantes et efface les séries (plusieurs mauvais jours d\'affilée), ce qui tend à <b>sous-estimer</b> les creux. Il ne modélise ni un changement de régime de marché, ni une stratégie qui cesserait de fonctionner.';
+}
+
+/* ---------- rendu : analyse des drawdowns ---------- */
+function renderBtDD(sim){
+  const card=document.getElementById('btDDCard'); if(!card) return;
+  const el=document.getElementById('btDDStats'), tag=document.getElementById('btDDTag'), tb=document.getElementById('btDDTable');
+  const eps=sim?btDrawdowns(sim):null;
+  if(!eps || !eps.length){ card.style.display='none'; return; }
+  card.style.display='block';
+  const parProf=eps.slice().sort((a,b)=>b.profondeur-a.profondeur);
+  const parDuree=eps.slice().sort((a,b)=>b.dureeJours-a.dureeJours);
+  const pire=parProf[0], plusLong=parDuree[0];
+  const recups=eps.filter(e=>e.recupJours!=null).map(e=>e.recupJours);
+  const recupMoy=recups.length?recups.reduce((a,b)=>a+b,0)/recups.length:null;
+  const jamais=eps.filter(e=>e.fin===null).length;
+  const notables=eps.filter(e=>e.profondeur>=1).length;
+
+  el.innerHTML=[
+    {lab:'Pire drawdown', val:pct(pire.profondeur,1), cls:'neg', sub:'creux du '+new Date(pire.creuxDate+'T12:00:00').toLocaleDateString('fr-FR')},
+    {lab:'Plus longue période sous l\'eau', val:plusLong.dureeJours.toLocaleString('fr-FR')+' j', cls:plusLong.dureeJours>365?'neg':'warn',
+     sub:'soit '+fmt(plusLong.dureeJours/30.44,1)+' mois'+(plusLong.fin===null?' · jamais récupéré':'')},
+    {lab:'Récupération moyenne', val:recupMoy==null?'—':fmt(recupMoy,0)+' j', sub:'du creux au nouveau sommet'},
+    {lab:'Creux de plus de 1 %', val:String(notables), sub:notables?'sur '+eps.length+' creux au total':''}
+  ].map(statHTML).join('');
+
+  tag.textContent = plusLong.dureeJours>365?'longs creux':plusLong.dureeJours>120?'creux modérés':'récupération rapide';
+  tag.className='tag '+(plusLong.dureeJours>365?'r':plusLong.dureeJours>120?'a':'g');
+
+  const fr=iso=>new Date(iso+'T12:00:00').toLocaleDateString('fr-FR');
+  tb.innerHTML='<div style="overflow:auto"><table style="font-size:12.5px"><thead><tr>'
+    +'<th>Profondeur</th><th>Début</th><th>Creux</th><th>Retour au sommet</th><th>Durée</th><th>Récupération</th>'
+    +'</tr></thead><tbody>'
+    + parProf.slice(0,8).map(e=>`<tr>
+        <td style="color:var(--red);font-weight:500">${pct(e.profondeur,2)}</td>
+        <td>${fr(e.debut)}</td><td>${fr(e.creuxDate)}</td>
+        <td>${e.fin?fr(e.fin):'<span style="color:var(--red)">jamais</span>'}</td>
+        <td>${e.dureeJours.toLocaleString('fr-FR')} j</td>
+        <td>${e.recupJours==null?'—':e.recupJours.toLocaleString('fr-FR')+' j'}</td></tr>`).join('')
+    +'</tbody></table></div>'
+    +'<div class="help" style="margin-top:8px">Les 8 creux les plus profonds. « Durée » = du sommet précédent au retour à ce sommet.'
+    +(jamais?' <b>'+jamais+' creux n\'a jamais été récupéré</b> avant la fin du backtest.':'')
+    +'<br>Mesuré sur les soldes de <b>clôture quotidienne</b> : le pire creux y est de '+pct(pire.profondeur,1)
+    +', contre '+pct(sim.mdd,1)+' au trade près (creux intra-journaliers compris) affiché plus haut. Les durées, elles, ne changent pas.</div>';
+}
+
+/* ================= ANALYSES DE ROBUSTESSE (style Quantanalyzer) =================
+   Toutes partent de la simulation « compte unique » : `sim.serie` = le solde en $
+   à la clôture de chaque jour de trading, `sim.retsTrades` = le rendement de
+   chaque trade sur ce compte commun. */
+
+/* Rendements quotidiens du compte commun. Le 1er jour se mesure depuis le capital. */
+function btRendementsQuotidiens(sim){
+  const r=[]; let prec=sim.capital;
+  for(const b of sim.serie){
+    if(prec>0) r.push(b/prec-1); else break;   // compte à zéro : on arrête
+    prec=b;
+  }
+  return r;
+}
+
+function btAnnees(sim){
+  if(!sim.dates || sim.dates.length<2) return 0;
+  const d0=new Date(sim.dates[0]+'T12:00:00'), d1=new Date(sim.dates[sim.dates.length-1]+'T12:00:00');
+  return (d1-d0)/(365.25*24*3600*1000);
+}
+function btNbJours(iso1, iso2){
+  return Math.round((new Date(iso2+'T12:00:00')-new Date(iso1+'T12:00:00'))/(24*3600*1000));
+}
+
+/* Ratios de qualité.
+   Annualisation : on n'a que les JOURS DE TRADING, donc on annualise avec le
+   nombre réel de jours de trading par an (≈250) et non 252 en dur. */
+function btRatios(sim){
+  const r=btRendementsQuotidiens(sim);
+  const n=r.length;
+  if(n<10 || sim.capital<=0) return null;
+  const ans=btAnnees(sim);
+  const jparAn = ans>0 ? n/ans : 252;
+  const moy=r.reduce((a,b)=>a+b,0)/n;
+  const sd=Math.sqrt(r.reduce((a,b)=>a+(b-moy)*(b-moy),0)/n);
+  // Écart-type des seules pertes (semi-déviation) : c'est ce qui distingue
+  // Sortino de Sharpe — la volatilité à la hausse n'est pas un risque.
+  const dsd=Math.sqrt(r.reduce((a,b)=>a+(b<0?b*b:0),0)/n);
+  const cagr=(sim.final>0 && ans>0) ? (Math.pow(sim.final/sim.capital,1/ans)-1)*100 : null;
+
+  // SQN (Van Tharp) = √N × moyenne/écart-type des rendements PAR TRADE.
+  // Plafonné à 100 trades comme le préconise Tharp : au-delà, √N gonfle le score
+  // sans que le système soit meilleur.
+  let sqn=null, nTrades=null;
+  if(sim.retsTrades && sim.retsTrades.length>=30){
+    const t=sim.retsTrades; nTrades=t.length;
+    const m=t.reduce((a,b)=>a+b,0)/t.length;
+    const s=Math.sqrt(t.reduce((a,b)=>a+(b-m)*(b-m),0)/t.length);
+    if(s>0) sqn=Math.sqrt(Math.min(t.length,100))*m/s;
+  }
+  return { ans, jparAn, cagr, nTrades, sqn,
+    sharpe: sd>0 ? moy/sd*Math.sqrt(jparAn) : null,
+    sortino: dsd>0 ? moy/dsd*Math.sqrt(jparAn) : null,
+    mar: (cagr!=null && sim.mdd>0) ? cagr/sim.mdd : null };
+}
+
+/* Monte Carlo — rééchantillonnage AVEC remise des rendements quotidiens.
+   Pourquoi avec remise : un simple mélange (permutation) laisserait la balance
+   finale INCHANGÉE — le produit des (1+r) ne dépend pas de l'ordre. Seul le
+   drawdown varierait. Le tirage avec remise fait varier les deux.
+   Limite assumée : cela suppose les jours indépendants et casse l'autocorrélation
+   (séries de gains/pertes). C'est la convention du genre, pas une vérité. */
+function btMonteCarlo(sim, nSim){
+  const r=btRendementsQuotidiens(sim);
+  const n=r.length;
+  if(n<50) return null;
+  nSim=nSim||3000;
+
+  // Drawdown historique recalculé SUR LA MÊME BASE QUOTIDIENNE que les tirages.
+  // `sim.mdd` est mesuré au deal (creux intra-journaliers compris) et vaut donc
+  // un peu plus : le comparer aux tirages fausserait la lecture.
+  let ddHist=0; (()=>{ let B=1,pic=1; for(const x of r){ B*=(1+x); if(B>pic)pic=B; const d=(pic-B)/pic*100; if(d>ddHist)ddHist=d; } })();
+
+  const finals=new Float64Array(nSim), dds=new Float64Array(nSim);
+  for(let k=0;k<nSim;k++){
+    let B=1, pic=1, mdd=0;
+    for(let j=0;j<n;j++){
+      B*=(1+r[(Math.random()*n)|0]);
+      if(B<=0){ B=0; mdd=100; break; }
+      if(B>pic)pic=B;
+      const d=(pic-B)/pic*100; if(d>mdd)mdd=d;
+    }
+    finals[k]=B; dds[k]=mdd;
+  }
+  finals.sort(); dds.sort();   // Float64Array trie numériquement
+  const q=(a,p)=>a[Math.min(a.length-1, Math.max(0, Math.floor(p*a.length)))];
+  let perte=0; for(let i=0;i<nSim;i++) if(finals[i]<1) perte++;
+  return { nSim, n, ddHist,
+    multMed:q(finals,0.5), mult05:q(finals,0.05), mult95:q(finals,0.95),
+    ddMed:q(dds,0.5), dd95:q(dds,0.95), ddPire:dds[nSim-1],
+    probPerte: perte/nSim*100, dds };
+}
+
+/* Épisodes de drawdown : chaque creux entre deux sommets, sa profondeur,
+   sa durée et son temps de récupération. */
+function btDrawdowns(sim){
+  const eps=[];
+  let pic=sim.capital, picDate=sim.dates[0], enCours=null;
+  sim.serie.forEach((B,i)=>{
+    const d=sim.dates[i];
+    if(B>=pic){
+      if(enCours){
+        enCours.fin=d;
+        enCours.recupJours=btNbJours(enCours.creuxDate, d);
+        eps.push(enCours); enCours=null;
+      }
+      pic=B; picDate=d;
+    } else {
+      const prof=pic>0?(pic-B)/pic*100:0;
+      if(!enCours) enCours={debut:picDate, profondeur:prof, creuxDate:d, fin:null, recupJours:null};
+      else if(prof>enCours.profondeur){ enCours.profondeur=prof; enCours.creuxDate=d; }
+    }
+  });
+  if(enCours) eps.push(enCours);   // creux jamais récupéré à la fin du backtest
+  const dernier=sim.dates[sim.dates.length-1];
+  eps.forEach(e=>{ e.dureeJours=btNbJours(e.debut, e.fin||dernier); });
+  return eps;
 }
 
 function renderBtCombo(){
@@ -1458,6 +1752,10 @@ function renderBtCombo(){
       : '<br>⚠ <b>Précision réduite.</b> Certains sets n\'ont pas le détail de leurs positions : le calcul retombe sur les gains/pertes <i>quotidiens</i> et le drawdown réel serait plus creusé que les '+pct(sim.mdd,1)+' affichés. Réimporte tes backtests pour un calcul au trade près.';
     note.innerHTML=t;
   }
+  // Les analyses de robustesse repartent de CETTE simulation : on les enchaîne ici
+  // plutôt que de la recalculer trois fois.
+  btSimCourante=sim;
+  renderBtRatios(sim); renderBtMC(sim); renderBtDD(sim);
 }
 
 function renderBtCompare(a){
@@ -1721,6 +2019,9 @@ document.getElementById('tabs').addEventListener('click',e=>{
     store.settings.btStatRisk=Number(e.target.value)||1;
     saveStore(store); renderBacktests(lastA);
   });
+  // Monte Carlo : chaque clic est un nouveau tirage aléatoire.
+  const mcb=document.getElementById('btMCRun');
+  if(mcb) mcb.addEventListener('click',()=>{ if(btSimCourante) renderBtMC(btSimCourante); });
   const clr=document.getElementById('btClearAll');
   if(clr) clr.addEventListener('click',()=>{
     if(!store.backtests.length) return;
