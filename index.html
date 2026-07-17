@@ -959,8 +959,8 @@ function btParseTrades(doc){
     let hIdx=-1, headers=null;
     for(let i=0;i<rows.length;i++){ const cells=Array.from(rows[i].querySelectorAll('td,th')).map(c=>c.textContent.trim().toLowerCase()); const joined=cells.join('|'); if(joined.indexOf('profit')>=0&&(joined.indexOf('symbol')>=0||joined.indexOf('symbole')>=0||joined.indexOf('type')>=0)){hIdx=i;headers=cells;break;} }
     if(hIdx<0)continue;
-    let idxProfit=-1,idxType=-1,idxSwap=-1,idxComm=-1,idxSym=-1,idxDir=-1,idxTime=-1;
-    headers.forEach((h,j)=>{ if(h.indexOf('profit')>=0)idxProfit=j; if(h==='type')idxType=j; if(h.indexOf('swap')>=0||h.indexOf('echange')>=0)idxSwap=j; if(h.indexOf('commission')>=0)idxComm=j; if(h==='symbol'||h==='symbole')idxSym=j; if(h.indexOf('direction')>=0)idxDir=j; if(h==='heure'||h==='time'||h==='date'||h==='open time'||h.indexOf("heure d")>=0)idxTime=j; });
+    let idxProfit=-1,idxType=-1,idxSwap=-1,idxComm=-1,idxSym=-1,idxDir=-1,idxTime=-1,idxVol=-1;
+    headers.forEach((h,j)=>{ if(h.indexOf('profit')>=0)idxProfit=j; if(h==='type')idxType=j; if(h.indexOf('swap')>=0||h.indexOf('echange')>=0)idxSwap=j; if(h.indexOf('commission')>=0)idxComm=j; if(h==='symbol'||h==='symbole')idxSym=j; if(h.indexOf('direction')>=0)idxDir=j; if(h==='heure'||h==='time'||h==='date'||h==='open time'||h.indexOf("heure d")>=0)idxTime=j; if(h==='volume'||h==='size'||h==='lots')idxVol=j; });
     if(idxProfit<0)continue;
     const trades=[]; let deposit=null; const symCount={};
     for(let r=hIdx+1;r<rows.length;r++){
@@ -983,7 +983,10 @@ function btParseTrades(doc){
       // deal de clôture (MT5 "out"/"inout") = position fermée. Les "in" gardent leur P&L (commission d'entrée) mais ne comptent pas comme trade.
       const isClose = idxDir<0 || dir!=='in';
       if(idxSym>=0 && isClose){const sy=(txt[idxSym]||'').trim();if(sy)symCount[sy]=(symCount[sy]||0)+1;}
-      trades.push({profit:profit+swap+comm,date,isClose,dir,dt:dt?dt.getTime():null});
+      // Volume : nécessaire pour apparier entrées et sorties quand l'EA fait des
+      // clôtures PARTIELLES (plusieurs "out" pour un seul "in").
+      const vol = idxVol>=0 ? (btNum(txt[idxVol])||0) : 0;
+      trades.push({profit:profit+swap+comm,date,isClose,dir,vol,dt:dt?dt.getTime():null});
     }
     if(trades.length){ let dom=null,mx=0;Object.keys(symCount).forEach(k=>{if(symCount[k]>mx){mx=symCount[k];dom=k;}}); return {trades,deposit,symbol:dom}; }
   }
@@ -991,31 +994,75 @@ function btParseTrades(doc){
 }
 
 /* Reconstitue les positions [ouverture, fermeture] à partir des deals in/out.
-   Vérifié sur les rapports réels : les "in" et les "out" s'équilibrent exactement
-   (aucune clôture partielle), donc l'appariement chronologique est fiable.
-   Stocké en secondes epoch pour rester léger dans localStorage. */
+   Sert UNIQUEMENT à compter les positions simultanées.
+
+   Appariement par VOLUME et non 1 pour 1 : certains EA (les TNT, ici) clôturent
+   en plusieurs fois — 505 "in" pour 539 "out" par exemple. Une position n'est
+   fermée que lorsque le volume sorti atteint le volume entré. Un appariement
+   naïf perdait les sorties excédentaires (jusqu'à 27 548 $ de P&L évaporé). */
 function btPositions(trades){
   const evs=trades.filter(t=>t.dt!=null&&t.dir).sort((a,b)=>a.dt-b.dt);
   if(!evs.length) return null;
   const ouvertes=[], pos=[];
+  const EPS=1e-9;
   evs.forEach(t=>{
-    if(t.dir==='in') ouvertes.push(t.dt);
-    else if(t.dir==='out'){ const o=ouvertes.shift(); if(o!=null) pos.push([Math.round(o/1000),Math.round(t.dt/1000)]); }
+    if(t.dir==='in'){ ouvertes.push({dt:t.dt, vol:(t.vol>0?t.vol:1)}); }
+    else if(t.dir==='out'){
+      let reste = t.vol>0 ? t.vol : (ouvertes.length?ouvertes[0].vol:0);
+      while(reste>EPS && ouvertes.length){
+        const o=ouvertes[0];
+        const pris=Math.min(o.vol, reste);
+        o.vol-=pris; reste-=pris;
+        if(o.vol<=EPS){ pos.push([Math.round(o.dt/1000), Math.round(t.dt/1000)]); ouvertes.shift(); }
+      }
+    }
   });
   return pos.length?pos:null;
 }
 
+/* Deals horodatés [seconde epoch, P&L] pour rejouer le portefeuille au trade près.
+   On garde les DEALS et non les positions : c'est ainsi que MT5 fait bouger le
+   solde, et ça reste juste même avec des clôtures partielles. */
+function btDeals(trades){
+  const d=trades.filter(t=>t.dt!=null)
+    .sort((a,b)=>a.dt-b.dt)
+    .map(t=>[Math.round(t.dt/1000), Math.round(t.profit*100)/100]);
+  return d.length?d:null;
+}
+
+/* Reproduit à l'identique la logique du rapport MT5 (vérifié sur 20 rapports) :
+   - « Profit Total Net »  = somme de TOUS les deals (entrées comprises)
+   - « Profit brut / Perte brut » = chaque DEAL classé par son profit+swap+commission.
+     N'utiliser que les sorties surévaluait le profit factor (1,39 vs 1,36 réel) :
+     les commissions d'entrée manquaient au dénominateur.
+   - « Solde Drawdown Relatif » = solde recalculé deal par deal, dans l'ordre réel
+   - « Nb trades » = nombre de deals de SORTIE (une clôture partielle compte)
+   - « Positions gagnantes » = sorties dont profit+swap+commission > 0            */
 function btCompute(trades, deposit){
-  const dated=trades.filter(t=>t.date).sort((a,b)=>a.date-b.date);
   const dep=deposit||10000;
-  let net=0,gp=0,gl=0,wins=0,nClose=0,eq=dep,peak=dep,ddPct=0; const days={}, monthly={};
-  dated.forEach(t=>{ net+=t.profit; eq+=t.profit; if(eq>peak)peak=eq; const dd=peak>0?(peak-eq)/peak*100:0; if(dd>ddPct)ddPct=dd;
-    const dk=t.date.getFullYear()+'-'+String(t.date.getMonth()+1).padStart(2,'0')+'-'+String(t.date.getDate()).padStart(2,'0'); days[dk]=(days[dk]||0)+t.profit;
-    const mk=t.date.getFullYear()+'-'+String(t.date.getMonth()+1).padStart(2,'0'); monthly[mk]=(monthly[mk]||0)+t.profit;
-    if(t.isClose){ nClose++; if(t.profit>=0){gp+=t.profit;if(t.profit>0)wins++;}else{gl+=t.profit;} } });
+  // Ordre chronologique exact (à la seconde), pas seulement par jour.
+  const dated=trades.filter(t=>t.date)
+    .sort((a,b)=> (a.dt!=null && b.dt!=null) ? (a.dt-b.dt) : (a.date-b.date));
+  let net=0, gp=0, gl=0, wins=0, nClose=0, eq=dep, peak=dep, ddPct=0;
+  const days={}, monthly={};
+  dated.forEach(t=>{
+    net+=t.profit;
+    eq+=t.profit; if(eq>peak)peak=eq;
+    const dd=peak>0?(peak-eq)/peak*100:0; if(dd>ddPct)ddPct=dd;
+    if(t.profit>=0) gp+=t.profit; else gl+=t.profit;
+    const dk=t.date.getFullYear()+'-'+String(t.date.getMonth()+1).padStart(2,'0')+'-'+String(t.date.getDate()).padStart(2,'0');
+    days[dk]=(days[dk]||0)+t.profit;
+    const mk=dk.slice(0,7);
+    monthly[mk]=(monthly[mk]||0)+t.profit;
+    if(t.isClose){ nClose++; if(t.profit>0)wins++; }
+  });
   const n=nClose;
   const months=Object.keys(monthly); const posM=months.filter(k=>monthly[k]>0).length;
-  return { deposit:dep, net, pf:gl!==0?gp/Math.abs(gl):null, winRate:n?wins/n*100:0, maxDDpct:ddPct, nbTrades:n, months:months.length, moisPositifs:months.length?posM/months.length*100:0, rendementNet:net/dep*100, days:Object.entries(days).sort((a,b)=>a[0]<b[0]?-1:1), positions:btPositions(trades) };
+  return { deposit:dep, net, pf:gl!==0?gp/Math.abs(gl):null, winRate:n?wins/n*100:0,
+           maxDDpct:ddPct, nbTrades:n, months:months.length,
+           moisPositifs:months.length?posM/months.length*100:0, rendementNet:net/dep*100,
+           days:Object.entries(days).sort((a,b)=>a[0]<b[0]?-1:1),
+           positions:btPositions(trades), deals:btDeals(trades) };
 }
 
 function btImportFile(file){
@@ -1031,7 +1078,7 @@ function btImportFile(file){
       if(!tr||!tr.trades.length){ alert('Aucune table de trades reconnue dans « '+file.name+' ». Vérifie que c\'est bien un rapport MT5.'); return; }
       const c=btCompute(tr.trades, sum.deposit||tr.deposit);
       const sig=c.nbTrades+'|'+Math.round(c.net)+'|'+(c.days[0]?c.days[0][0]:'');
-      const entry={ id:'bt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), name:(file.name.replace(/\.html?$/i,'')||sum.symbol||tr.symbol), sig, deposit:c.deposit, riskPct:1, included:true, symbol:sum.symbol||tr.symbol||'', period:sum.period||'', days:c.days, positions:c.positions, stats:{net:c.net,pf:c.pf,winRate:c.winRate,maxDDpct:c.maxDDpct,nbTrades:c.nbTrades,months:c.months,moisPositifs:c.moisPositifs,rendementNet:c.rendementNet} };
+      const entry={ id:'bt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), name:(file.name.replace(/\.html?$/i,'')||sum.symbol||tr.symbol), sig, deposit:c.deposit, riskPct:1, included:true, symbol:sum.symbol||tr.symbol||'', period:sum.period||'', days:c.days, positions:c.positions, deals:c.deals, stats:{net:c.net,pf:c.pf,winRate:c.winRate,maxDDpct:c.maxDDpct,nbTrades:c.nbTrades,months:c.months,moisPositifs:c.moisPositifs,rendementNet:c.rendementNet} };
       const ix=store.backtests.findIndex(b=>b.sig&&b.sig===sig);
       if(ix>=0){ entry.included=store.backtests[ix].included; store.backtests[ix]=entry; }  // ré-import : remplace, pas de doublon
       else store.backtests.push(entry);
@@ -1260,6 +1307,46 @@ function renderBtCorr(){
        B(j) = B(j-1) × (1 + Σ_i r_i(j))
    `echelle` rejoue le tout à 0,5 % ou 0,1 % au lieu du 1 % d'origine. */
 function btSimuleCompteUnique(bts, capital, echelle){
+  // Trade par trade si TOUS les sets ont le détail des deals (import récent),
+  // sinon repli quotidien (imports anciens). Le mode est remonté dans `precision`.
+  const complet = bts.length>0 && bts.every(b=>b.deals && b.deals.length);
+  return complet ? btSimTrades(bts,capital,echelle) : btSimJours(bts,capital,echelle);
+}
+
+/* Mode exact : chaque DEAL est rejoué à son horodatage réel, tous sets confondus.
+   C'est ainsi que MT5 fait bouger le solde — et ça reste juste même quand un EA
+   clôture en plusieurs fois. Le drawdown suit la courbe de solde au trade près. */
+function btSimTrades(bts, capital, echelle){
+  const evs=[];
+  bts.forEach((b,i)=>{ b.deals.forEach(d=>evs.push({t:d[0], s:i, pnl:d[1]})); });
+  evs.sort((a,b)=>a.t-b.t);
+  const solde=bts.map(b=>Number(b.deposit)||capital);
+  let B=capital, pic=capital, mdd=0, ruine=false;
+  const dates=[], serie=[], parMois={};
+  let jourCourant=null;
+  evs.forEach(e=>{
+    if(ruine) return;
+    const s=solde[e.s];
+    if(s>0){
+      const avant=B;
+      B=B*(1+(e.pnl/s)*echelle);
+      if(B<=0){ B=0; ruine=true; }
+      if(B>pic) pic=B;
+      const dd=pic>0?(pic-B)/pic*100:0; if(dd>mdd) mdd=dd;
+      const iso=new Date(e.t*1000).toISOString().slice(0,10), m=iso.slice(0,7);
+      if(!parMois[m]) parMois[m]={debut:avant,fin:B}; else parMois[m].fin=B;
+      // un seul point par jour sur le graphique : le solde de clôture du jour
+      if(iso!==jourCourant){ dates.push(iso); serie.push(round2(B)); jourCourant=iso; }
+      else serie[serie.length-1]=round2(B);
+    }
+    solde[e.s]+=e.pnl;
+  });
+  return btSimResultat(dates,serie,capital,B,mdd,ruine,parMois,'trade');
+}
+
+/* Repli : P&L agrégé par jour. Sous-estime légèrement le drawdown (les creux
+   intra-journaliers sont invisibles) — mesuré : 12,06 % contre 13,68 % au trade. */
+function btSimJours(bts, capital, echelle){
   const parJour={};
   bts.forEach(b=>{
     let solde=Number(b.deposit)||capital;
@@ -1283,9 +1370,13 @@ function btSimuleCompteUnique(bts, capital, echelle){
     }
     return round2(B);
   });
+  return btSimResultat(dates,serie,capital,B,mdd,ruine,parMois,'jour');
+}
+
+function btSimResultat(dates,serie,capital,B,mdd,ruine,parMois,precision){
   const mois=Object.keys(parMois);
   const moisPos=mois.filter(m=>parMois[m].fin>parMois[m].debut).length;
-  return { dates, serie, capital, final:B, mdd, ruine,
+  return { dates, serie, capital, final:B, mdd, ruine, precision,
            rendement: capital>0?(B-capital)/capital*100:0,
            mois:mois.length, moisPos, moisPositifs: mois.length?moisPos/mois.length*100:0 };
 }
@@ -1359,8 +1450,9 @@ function renderBtCombo(){
       +btStatTxt()+' d\'un capital qui grossit sans limite. Passé quelques millions, les lots requis dépassent la liquidité du marché, '
       +'les limites du broker et les règles Darwinex. Lis-le comme « ce risque est très agressif », pas comme un objectif : '
       +'baisse le sélecteur à 0,5 % ou 0,1 % pour un ordre de grandeur réaliste.';
-    t+='<br>⚠ <b>Projection, pas une promesse.</b> Elle rejoue les gains/pertes <i>quotidiens</i> de chaque backtest : le drawdown réel, mesuré trade par trade, serait plus creusé que les '
-      +pct(sim.mdd,1)+' affichés. Les backtests couvrent '+(sim.mois||'?')+' mois et supposent que chaque set se comporte à l\'avenir comme dans le passé — ce que rien ne garantit.';
+    t+= sim.precision==='trade'
+      ? '<br>⚠ <b>Projection, pas une promesse.</b> Chaque position est rejouée à sa date de clôture, dans l\'ordre chronologique réel : le drawdown de '+pct(sim.mdd,1)+' est mesuré trade par trade, comme le fait MT5. Reste que les backtests couvrent '+(sim.mois||'?')+' mois et supposent que chaque set se comporte à l\'avenir comme dans le passé — ce que rien ne garantit.'
+      : '<br>⚠ <b>Précision réduite.</b> Certains sets n\'ont pas le détail de leurs positions : le calcul retombe sur les gains/pertes <i>quotidiens</i> et le drawdown réel serait plus creusé que les '+pct(sim.mdd,1)+' affichés. Réimporte tes backtests pour un calcul au trade près.';
     note.innerHTML=t;
   }
 }
