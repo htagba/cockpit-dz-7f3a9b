@@ -403,7 +403,7 @@
     <details class="card" data-sect="btQA" id="btQACard" style="margin-top:14px" open>
       <summary><h3>Analyse lots fixes <span style="font-weight:400;color:var(--dim);font-size:11px">(façon QuantAnalyzer)</span> <span class="tag a" id="btQATag">—</span></h3></summary>
       <div class="sect-body">
-        <div class="help" style="margin-bottom:10px">Ici les 20 sets tournent sur un compte unique en gardant leurs <b>lots d'origine</b>, <b>sans intérêts composés</b> — le modèle de QuantAnalyzer. C'est l'inverse du « Portefeuille combiné » plus haut (composé). Les deux encadrent la réalité : ce modèle-ci vaut si tes EA tradent en <b>lots fixes</b>, l'autre s'ils risquent un <b>% du solde</b>.</div>
+        <div class="help" style="margin-bottom:10px">Ici les sets tournent sur un compte unique en gardant leurs <b>lots d'origine (1 %/trade, comme tes backtests et QuantAnalyzer)</b>, <b>sans intérêts composés</b>. C'est l'inverse du « Portefeuille combiné » plus haut (composé, qui suit le sélecteur de risque). Les deux encadrent la réalité : ce modèle-ci vaut si tes EA tradent en <b>lots fixes</b>, l'autre s'ils risquent un <b>% du solde</b>. <b>Cette section reste toujours à 1 %</b> — le sélecteur en haut ne l'affecte pas.</div>
         <div class="grid g4" id="btQAStats"></div>
         <h4 style="margin:16px 0 8px;font-size:13px;color:var(--muted)">Performance mensuelle ($ · lots fixes)</h4>
         <div id="btQAMonthly" style="overflow:auto"></div>
@@ -1898,7 +1898,7 @@ function renderBtQA(){
   document.getElementById('btQANote').innerHTML=
     'Return/DD = <b>'+fmt(rdd,1)+'</b> (net ÷ drawdown max). '
     +'Ces chiffres reproduisent QuantAnalyzer à ~1 % près ; le léger écart vient du classement gagnant/perdant au niveau du <i>deal</i> (comme MT5) plutôt qu\'au round-trip. '
-    +'Rappel : le drawdown en % dépend du capital que tu mets sur le compte — il est ici rapporté à '+money0(cap)+'.';
+    +'Le drawdown en <b>$</b> ('+money0(add.mddAbs)+') est fixe et reproduit QuantAnalyzer. Le drawdown en <b>%</b>, lui, dépend du capital du compte : ici '+pct(ddPctSurCap,1)+' sur '+money0(cap)+', mais QuantAnalyzer affiche 4,4 % car il suppose un compte plus gros (~520 k$). Même montant, base différente.';
 }
 
 /* ---------- rendu : analyse des drawdowns ---------- */
