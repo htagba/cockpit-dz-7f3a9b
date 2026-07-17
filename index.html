@@ -321,6 +321,8 @@
 
     <div class="dz" id="btDrop"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:26px;height:26px"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg><div style="margin-top:8px">Glisse ici les rapports HTML de tes backtests<br>ou <label style="color:var(--accent);cursor:pointer;text-decoration:underline">parcours tes fichiers<input type="file" id="btFile" accept=".htm,.html" multiple style="display:none"></label></div></div>
 
+    <div id="btPubMsg" class="help" style="display:none;margin-top:10px"></div>
+
     <div id="btToolbar" style="display:none;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap">
       <span id="btCount" style="font-size:13px;color:var(--muted)"></span>
       <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin:0;margin-left:auto">Afficher les stats à
@@ -330,6 +332,7 @@
           <option value="0.1">0,1 % — ÷10</option>
         </select>
       </label>
+      <button class="ghost sm" id="btPublier" title="Génère backtests.json à déposer sur GitHub : tes autres appareils le chargeront tout seuls"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Publier les backtests</button>
       <button class="ghost sm" id="btClearAll" style="border-color:var(--red);color:var(--red)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>Tout effacer</button>
     </div>
 
@@ -426,6 +429,10 @@
 const FILE_NAME = "Synchronisation APP Gestion portefeuille-Reel";
 const POLL_MS = 5*60*1000;
 const DATA_ENDPOINT = "data.json";
+/* Backtests publiés, déposés à côté de index.html sur GitHub. Lu UNE fois au
+   démarrage (pas dans la boucle des 5 min) : ce fichier ne change que lorsque
+   tu republies. Même nom en local : le serveur Python sert le dossier. */
+const BT_ENDPOINT = "backtests.json";
 const SERVER_MODE = location.protocol.startsWith('http');
 let fileHandle=null, pollTimer=null, lastData=null, chart=null, lastA=null, cvMap={};
 
@@ -1154,6 +1161,57 @@ function autoMagic(name){
   if(/gdaxi/.test(n)||/\bdax\b/.test(n)) return 6;
   return null;
 }
+/* ---------- publication / synchronisation des backtests ----------
+   Les backtests naissent dans CE navigateur (les rapports HTML y sont analysés)
+   et n'en sortent jamais : localStorage est propre à chaque appareil. Pour les
+   retrouver sur mobile, on publie un backtests.json à côté de index.html ;
+   tous les appareils le chargent au démarrage. Le VPS ne peut pas s'en charger :
+   il ne voit jamais ces rapports. */
+
+function btPaquet(){
+  if(!store.backtests || !store.backtests.length) throw new Error('aucun backtest à publier');
+  return { publieLe:new Date().toISOString(), nb:store.backtests.length, backtests:store.backtests };
+}
+
+function btPublier(){
+  const msg=document.getElementById('btPubMsg');
+  try{
+    const paquet=btPaquet();
+    const quand=paquet.publieLe;
+    const blob=new Blob([JSON.stringify(paquet)],{type:'application/json'});
+    const url=URL.createObjectURL(blob), el=document.createElement('a');
+    el.href=url; el.download='backtests.json';
+    document.body.appendChild(el); el.click(); el.remove(); URL.revokeObjectURL(url);
+    // On date la publication localement : ce navigateur ne retéléchargera pas la sienne.
+    store.btPublieLe=quand; saveStore(store);
+    if(msg){ msg.style.display='block';
+      msg.innerHTML='✅ <b>backtests.json généré</b> — '+store.backtests.length+' backtests, '+fmt(blob.size/1024,0)+' Ko. '
+        +'Dépose-le sur GitHub <b>à côté de index.html</b> (Add file → Upload files). '
+        +'Tes autres appareils le chargeront seuls au prochain rafraîchissement.'; }
+  }catch(e){ if(msg){ msg.style.display='block'; msg.textContent='Erreur à la publication : '+e.message; } }
+}
+
+/* Charge la publication distante si elle est plus récente que celle de ce navigateur.
+   Silencieux si le fichier n'existe pas — c'est le cas normal tant que rien n'est publié. */
+async function chargerBacktestsPublies(){
+  try{
+    const r=await fetch(BT_ENDPOINT+'?t='+Date.now(),{cache:'no-store'});
+    if(!r.ok) return null;
+    const o=await r.json();
+    if(!o || !Array.isArray(o.backtests) || !o.backtests.length) return null;
+    const rien = !store.backtests || !store.backtests.length;
+    const distant=o.publieLe||null, local=store.btPublieLe||null;
+    // Publication sans date : on ne l'impose pas à un navigateur qui travaille déjà.
+    if(!rien && !distant) return null;
+    // Rien de neuf : on garde l'existant (et donc les imports faits ici depuis).
+    if(!rien && local && distant && distant<=local) return null;
+    store.backtests=o.backtests;
+    store.btPublieLe=distant;
+    saveStore(store);
+    return { nb:o.backtests.length, quand:distant, remplace:!rien };
+  }catch(e){ return null; }   // absent, hors-ligne ou JSON invalide : on continue sans
+}
+
 function renderBacktests(a){
   const list=document.getElementById('btList'); const bts=store.backtests;
   const tb=document.getElementById('btToolbar'); const cnt=document.getElementById('btCount');
@@ -1975,7 +2033,17 @@ document.getElementById('btnRefresh').addEventListener('click',()=>{ if(SERVER_M
   document.getElementById('setDdMax').value=store.settings.ddMax;
   majLibellesRisque();
   calcLot();
+  // Backtests publiés : à charger AVANT le premier rendu, sinon l'onglet
+  // s'afficherait vide puis se remplirait d'un coup.
+  const pub=await chargerBacktestsPublies();
   renderBacktests(lastA);
+  if(pub){
+    const m=document.getElementById('btPubMsg');
+    if(m){ m.style.display='block';
+      m.innerHTML='📥 <b>'+pub.nb+' backtests chargés</b> depuis la publication du '
+        +(pub.quand?new Date(pub.quand).toLocaleString('fr-FR'):'—')
+        +(pub.remplace?' — ils ont remplacé ceux de ce navigateur, plus anciens.':'.'); }
+  }
 })();
 
 /* drag & drop fallback */
@@ -2022,6 +2090,8 @@ document.getElementById('tabs').addEventListener('click',e=>{
   // Monte Carlo : chaque clic est un nouveau tirage aléatoire.
   const mcb=document.getElementById('btMCRun');
   if(mcb) mcb.addEventListener('click',()=>{ if(btSimCourante) renderBtMC(btSimCourante); });
+  const pub=document.getElementById('btPublier');
+  if(pub) pub.addEventListener('click',btPublier);
   const clr=document.getElementById('btClearAll');
   if(clr) clr.addEventListener('click',()=>{
     if(!store.backtests.length) return;
