@@ -1278,11 +1278,15 @@ function renderBacktests(a){
     </div>
     ${(function(){
       const mg=(b.magic!=null&&b.magic!=='')?String(b.magic):(autoMagic(b.name)||'');
-      const btDDs=(s.maxDDpct||0)*btScale();
+      // Référence RESIMULÉE au risque du live — pas une division. Avec des gains
+      // composés, « ÷2 » est faux : c'est d'ailleurs pour ça que la carte ci-dessus
+      // affichait 2,1 % quand cette ligne annonçait 2,12 %.
+      const simRef = btSimuleCompteUnique([b], Number(b.deposit)||100000, btScale());
+      const btDDs = simRef ? simRef.mdd : (s.maxDDpct||0)*btScale();
       let cmp;
       if(!mg){ cmp='<span style="color:var(--dim)">renseigne le magic du set live pour comparer le drawdown</span>'; }
-      else if(!liveDD[mg]||!liveDD[mg].n){ cmp='DD réel : <b>—</b> <span style="color:var(--dim)">(pas encore de trade live)</span> &nbsp;·&nbsp; réf. backtest '+btDivTxt()+' : <b>'+pct(btDDs,2)+'</b>'; }
-      else { const ld=liveDD[mg].dd, over=ld>btDDs; cmp='DD réel ('+riskTxt()+') : <b class="'+(over?'neg':'pos')+'">'+pct(ld,2)+'</b> &nbsp;·&nbsp; réf. backtest '+btDivTxt()+' : <b>'+pct(btDDs,2)+'</b> &nbsp;·&nbsp; '+(over?'🔴 dépasse la réf.':'🟢 sous la réf.'); }
+      else if(!liveDD[mg]||!liveDD[mg].n){ cmp='DD réel : <b>—</b> <span style="color:var(--dim)">(pas encore de trade live)</span> &nbsp;·&nbsp; réf. backtest à '+riskTxt()+' : <b>'+pct(btDDs,2)+'</b>'; }
+      else { const ld=liveDD[mg].dd, over=ld>btDDs; cmp='DD réel ('+riskTxt()+') : <b class="'+(over?'neg':'pos')+'">'+pct(ld,2)+'</b> &nbsp;·&nbsp; réf. backtest à '+riskTxt()+' : <b>'+pct(btDDs,2)+'</b> &nbsp;·&nbsp; '+(over?'🔴 dépasse la réf.':'🟢 sous la réf.'); }
       return '<div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;font-size:12.5px"><label style="font-size:12px;color:var(--muted);margin:0">Set live (magic) :</label><input type="number" class="bt-magic" data-id="'+b.id+'" value="'+mg+'" placeholder="—" style="width:88px;padding:5px 8px"><span style="flex:1;min-width:220px">'+cmp+'</span></div>';
     })()}
     <div class="help" style="margin-top:10px">${b.symbol||''}${b.period?(' · '+b.period):''} · dépôt ${money(b.deposit)} · ${s.months} mois · ${fmt(s.winRate,1)} % réussite</div>
