@@ -2273,7 +2273,7 @@ function renderBtCombo(){
   const head = s ? [
     {src:'calc', lab:'Profit total', val:money(net), cls:'pos', sub:s.n.toLocaleString('fr-FR')+' trades'},
     {src:'calc', lab:'Return / DD', val:retDD==null?'—':fmt(retDD,2), cls:'pos', sub:'profit ÷ drawdown $'},
-    {src:'calc', lab:'Drawdown max', val:money0(add.mddAbs), cls:'warn', sub:'soit '+pct(ddPct,2)+' d\'un compte de '+money0(qaBaseCapital())},
+    {src:'calc', lab:'Drawdown max', val:pct(ddPct,2), cls:'warn', sub:money0(add.mddAbs)+' sur un compte de '+money0(qaBaseCapital())},
     {src:'calc', lab:'Profit factor', val:s.pf===Infinity?'∞':fmt(s.pf,2), cls:'pos', sub:'gains ÷ pertes'},
     {src:'calc', lab:'Winning %', val:pct(s.winRate,2), cls:'pos', sub:s.wins.toLocaleString('fr-FR')+' gagnants / '+s.losses.toLocaleString('fr-FR')+' perdants'},
     {src:'calc', lab:'Trade moyen', val:money(s.expectancy), cls:s.expectancy>=0?'pos':'neg', sub:'espérance par trade'},
