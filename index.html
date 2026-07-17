@@ -342,6 +342,12 @@
       <div class="grid g4" id="btComboStats" style="margin-top:14px"></div>
     </div>
 
+    <div class="card" style="margin-top:14px" id="btCorrCard">
+      <h3 style="margin-bottom:4px">Corrélation des sets du portefeuille <span class="tag a" id="btCorrTag">—</span></h3>
+      <div class="help" style="margin-bottom:10px">Calculée sur les gains/pertes <b>quotidiens</b> des backtests, sur leur période commune. Proche de 0 = sets indépendants (bonne diversification). Proche de 1 = ils gagnent et perdent ensemble (drawdowns cumulés).</div>
+      <div id="btCorrMatrix"></div>
+    </div>
+
     <div class="card" style="margin-top:14px" id="btCmpCard">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <h3 style="margin:0">Live réel vs référence backtest</h3>
@@ -916,6 +922,16 @@ function btParseSummary(doc){
   return { deposit:btNum(findVal(['Initial deposit:','Dépôt initial:','Initial Deposit'])), net:btNum(findVal(['Total net profit:','Total Net Profit','Bénéfice net total:','Profit net:'])), symbol:findVal(['Symbol:','Symbole:','Instrument:']), period:findVal(['Period:','Période:'])||'' };
 }
 
+/* "2020.01.16 18:00:09" -> Date complète (heure comprise).
+   L'heure est indispensable pour reconstruire les positions simultanées. */
+function btParseDT(s){
+  if(!s) return null;
+  const m=String(s).match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if(!m) return null;
+  const d=new Date(+m[1],+m[2]-1,+m[3],+(m[4]||0),+(m[5]||0),+(m[6]||0));
+  return isNaN(d)?null:d;
+}
+
 function btParseTrades(doc){
   const tables=Array.from(doc.querySelectorAll('table'));
   for(const table of tables){
@@ -923,8 +939,8 @@ function btParseTrades(doc){
     let hIdx=-1, headers=null;
     for(let i=0;i<rows.length;i++){ const cells=Array.from(rows[i].querySelectorAll('td,th')).map(c=>c.textContent.trim().toLowerCase()); const joined=cells.join('|'); if(joined.indexOf('profit')>=0&&(joined.indexOf('symbol')>=0||joined.indexOf('symbole')>=0||joined.indexOf('type')>=0)){hIdx=i;headers=cells;break;} }
     if(hIdx<0)continue;
-    let idxProfit=-1,idxType=-1,idxSwap=-1,idxComm=-1,idxSym=-1,idxDir=-1;
-    headers.forEach((h,j)=>{ if(h.indexOf('profit')>=0)idxProfit=j; if(h==='type')idxType=j; if(h.indexOf('swap')>=0||h.indexOf('echange')>=0)idxSwap=j; if(h.indexOf('commission')>=0)idxComm=j; if(h==='symbol'||h==='symbole')idxSym=j; if(h.indexOf('direction')>=0)idxDir=j; });
+    let idxProfit=-1,idxType=-1,idxSwap=-1,idxComm=-1,idxSym=-1,idxDir=-1,idxTime=-1;
+    headers.forEach((h,j)=>{ if(h.indexOf('profit')>=0)idxProfit=j; if(h==='type')idxType=j; if(h.indexOf('swap')>=0||h.indexOf('echange')>=0)idxSwap=j; if(h.indexOf('commission')>=0)idxComm=j; if(h==='symbol'||h==='symbole')idxSym=j; if(h.indexOf('direction')>=0)idxDir=j; if(h==='heure'||h==='time'||h==='date'||h==='open time'||h.indexOf("heure d")>=0)idxTime=j; });
     if(idxProfit<0)continue;
     const trades=[]; let deposit=null; const symCount={};
     for(let r=hIdx+1;r<rows.length;r++){
@@ -937,18 +953,36 @@ function btParseTrades(doc){
       if(profit==null)continue;
       const isTrade=type==='buy'||type==='sell'||type.indexOf('buy')>=0||type.indexOf('sell')>=0;
       if(idxType>=0&&!isTrade)continue;
-      let date=null; for(let k=txt.length-1;k>=0;k--){const dm=txt[k].match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);if(dm){date=new Date(+dm[1],+dm[2]-1,+dm[3]);break;}}
+      // Horodatage complet depuis la colonne "Heure" ; sinon, ancien repli (date seule).
+      let dt = idxTime>=0 ? btParseDT(txt[idxTime]) : null;
+      if(!dt){ for(let k=txt.length-1;k>=0;k--){ const d2=btParseDT(txt[k]); if(d2){dt=d2;break;} } }
+      const date = dt ? new Date(dt.getFullYear(),dt.getMonth(),dt.getDate()) : null;
       if(idxType<0&&!date)continue;
       const swap=idxSwap>=0?(btNum(txt[idxSwap])||0):0;
       const comm=idxComm>=0?(btNum(txt[idxComm])||0):0;
       // deal de clôture (MT5 "out"/"inout") = position fermée. Les "in" gardent leur P&L (commission d'entrée) mais ne comptent pas comme trade.
       const isClose = idxDir<0 || dir!=='in';
       if(idxSym>=0 && isClose){const sy=(txt[idxSym]||'').trim();if(sy)symCount[sy]=(symCount[sy]||0)+1;}
-      trades.push({profit:profit+swap+comm,date,isClose});
+      trades.push({profit:profit+swap+comm,date,isClose,dir,dt:dt?dt.getTime():null});
     }
     if(trades.length){ let dom=null,mx=0;Object.keys(symCount).forEach(k=>{if(symCount[k]>mx){mx=symCount[k];dom=k;}}); return {trades,deposit,symbol:dom}; }
   }
   return null;
+}
+
+/* Reconstitue les positions [ouverture, fermeture] à partir des deals in/out.
+   Vérifié sur les rapports réels : les "in" et les "out" s'équilibrent exactement
+   (aucune clôture partielle), donc l'appariement chronologique est fiable.
+   Stocké en secondes epoch pour rester léger dans localStorage. */
+function btPositions(trades){
+  const evs=trades.filter(t=>t.dt!=null&&t.dir).sort((a,b)=>a.dt-b.dt);
+  if(!evs.length) return null;
+  const ouvertes=[], pos=[];
+  evs.forEach(t=>{
+    if(t.dir==='in') ouvertes.push(t.dt);
+    else if(t.dir==='out'){ const o=ouvertes.shift(); if(o!=null) pos.push([Math.round(o/1000),Math.round(t.dt/1000)]); }
+  });
+  return pos.length?pos:null;
 }
 
 function btCompute(trades, deposit){
@@ -961,7 +995,7 @@ function btCompute(trades, deposit){
     if(t.isClose){ nClose++; if(t.profit>=0){gp+=t.profit;if(t.profit>0)wins++;}else{gl+=t.profit;} } });
   const n=nClose;
   const months=Object.keys(monthly); const posM=months.filter(k=>monthly[k]>0).length;
-  return { deposit:dep, net, pf:gl!==0?gp/Math.abs(gl):null, winRate:n?wins/n*100:0, maxDDpct:ddPct, nbTrades:n, months:months.length, moisPositifs:months.length?posM/months.length*100:0, rendementNet:net/dep*100, days:Object.entries(days).sort((a,b)=>a[0]<b[0]?-1:1) };
+  return { deposit:dep, net, pf:gl!==0?gp/Math.abs(gl):null, winRate:n?wins/n*100:0, maxDDpct:ddPct, nbTrades:n, months:months.length, moisPositifs:months.length?posM/months.length*100:0, rendementNet:net/dep*100, days:Object.entries(days).sort((a,b)=>a[0]<b[0]?-1:1), positions:btPositions(trades) };
 }
 
 function btImportFile(file){
@@ -977,7 +1011,7 @@ function btImportFile(file){
       if(!tr||!tr.trades.length){ alert('Aucune table de trades reconnue dans « '+file.name+' ». Vérifie que c\'est bien un rapport MT5.'); return; }
       const c=btCompute(tr.trades, sum.deposit||tr.deposit);
       const sig=c.nbTrades+'|'+Math.round(c.net)+'|'+(c.days[0]?c.days[0][0]:'');
-      const entry={ id:'bt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), name:(file.name.replace(/\.html?$/i,'')||sum.symbol||tr.symbol), sig, deposit:c.deposit, riskPct:1, included:true, symbol:sum.symbol||tr.symbol||'', period:sum.period||'', days:c.days, stats:{net:c.net,pf:c.pf,winRate:c.winRate,maxDDpct:c.maxDDpct,nbTrades:c.nbTrades,months:c.months,moisPositifs:c.moisPositifs,rendementNet:c.rendementNet} };
+      const entry={ id:'bt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), name:(file.name.replace(/\.html?$/i,'')||sum.symbol||tr.symbol), sig, deposit:c.deposit, riskPct:1, included:true, symbol:sum.symbol||tr.symbol||'', period:sum.period||'', days:c.days, positions:c.positions, stats:{net:c.net,pf:c.pf,winRate:c.winRate,maxDDpct:c.maxDDpct,nbTrades:c.nbTrades,months:c.months,moisPositifs:c.moisPositifs,rendementNet:c.rendementNet} };
       const ix=store.backtests.findIndex(b=>b.sig&&b.sig===sig);
       if(ix>=0){ entry.included=store.backtests[ix].included; store.backtests[ix]=entry; }  // ré-import : remplace, pas de doublon
       else store.backtests.push(entry);
@@ -1020,7 +1054,7 @@ function renderBacktests(a){
     const wrapE=document.getElementById('btListWrap'); if(wrapE) wrapE.style.display='none';
     if(tb) tb.style.display='none';
     ['btAllChart','btComboChart'].forEach(id=>{const c=document.getElementById(id); if(c&&c._chart){c._chart.destroy();c._chart=null;}});
-    renderBtCompare(a); return;
+    renderBtCorr(); renderBtCompare(a); return;
   }
   const wrap=document.getElementById('btListWrap'); if(wrap) wrap.style.display='block';
   if(tb){ tb.style.display='flex'; cnt.textContent=bts.length+' backtest'+(bts.length>1?'s':'')+' importé'+(bts.length>1?'s':''); }
@@ -1055,7 +1089,7 @@ function renderBacktests(a){
   list.querySelectorAll('[data-inc]').forEach(cb=>cb.addEventListener('change',e=>{const b=store.backtests.find(x=>x.id===e.target.dataset.inc);if(b){b.included=e.target.checked;saveStore(store);renderBacktests(lastA);}}));
   list.querySelectorAll('[data-del]').forEach(btn=>btn.addEventListener('click',e=>{store.backtests=store.backtests.filter(x=>x.id!==e.target.dataset.del);saveStore(store);renderBacktests(lastA);}));
   list.querySelectorAll('.bt-magic').forEach(inp=>inp.addEventListener('change',e=>{const b=store.backtests.find(x=>x.id===e.target.dataset.id);if(b){const v=e.target.value.trim();b.magic=v===''?null:v;saveStore(store);renderBacktests(lastA);}}));
-  renderBtAll(); renderBtCombo(); renderBtCompare(a);
+  renderBtAll(); renderBtCombo(); renderBtCorr(); renderBtCompare(a);
 }
 
 const BT_COLORS=['#7c6df2','#388bfd','#2ea043','#d29922','#f85149','#1d9e75','#d4537e','#85b7eb','#ef9f27','#c0dd97','#e24b4a','#5dcaa5'];
@@ -1072,6 +1106,113 @@ function renderBtAll(){
   });
   if(cv._chart)cv._chart.destroy();
   cv._chart=new Chart(cv,{type:'line',data:{labels:allDates,datasets},options:{plugins:{legend:{display:true,labels:{color:'#8b95a5',boxWidth:12,padding:10}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y} %`}}},scales:{x:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',maxTicksLimit:9}},y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',callback:v=>v+' %'}}}}});
+}
+
+/* ---------- positions simultanées du portefeuille ----------
+   On fusionne les intervalles de tous les sets inclus : +1 à l'ouverture,
+   -1 à la fermeture, puis on balaie dans l'ordre chronologique.
+   À horodatage égal, les fermetures passent AVANT les ouvertures : une position
+   qui se ferme à l'instant où une autre s'ouvre n'est pas un chevauchement. */
+function btMaxSimul(bts){
+  const evs=[]; let sansDonnees=0;
+  bts.forEach(b=>{
+    if(!b.positions||!b.positions.length){ sansDonnees++; return; }
+    b.positions.forEach(p=>{ evs.push([p[0],1]); evs.push([p[1],-1]); });
+  });
+  if(!evs.length) return {max:null,quand:null,sansDonnees,avecDonnees:bts.length-sansDonnees};
+  evs.sort((a,b)=> (a[0]-b[0]) || (a[1]-b[1]));
+  let cur=0,max=0,quand=null;
+  evs.forEach(e=>{ cur+=e[1]; if(cur>max){max=cur;quand=e[0];} });
+  return {max,quand,sansDonnees,avecDonnees:bts.length-sansDonnees};
+}
+
+/* ---------- corrélation des backtests ----------
+   Sur les P&L quotidiens, restreints à la période COMMUNE de chaque paire :
+   sinon, les jours où un set n'existait pas encore compteraient comme des 0
+   et fausseraient le résultat. */
+function btPearson(x,y){
+  const n=x.length; if(n<3) return null;
+  const mx=x.reduce((s,v)=>s+v,0)/n, my=y.reduce((s,v)=>s+v,0)/n;
+  let sxy=0,sx=0,sy=0;
+  for(let i=0;i<n;i++){ const dx=x[i]-mx, dy=y[i]-my; sxy+=dx*dy; sx+=dx*dx; sy+=dy*dy; }
+  if(sx===0||sy===0) return null;
+  return sxy/Math.sqrt(sx*sy);
+}
+function btCorrCompute(bts){
+  const maps={}, bornes={};
+  bts.forEach(b=>{
+    const m={}; (b.days||[]).forEach(d=>{ m[d[0]]=(m[d[0]]||0)+d[1]; });
+    maps[b.id]=m; const ds=Object.keys(m).sort();
+    bornes[b.id]= ds.length ? [ds[0], ds[ds.length-1]] : null;
+  });
+  const paire=(b1,b2)=>{
+    const m1=maps[b1.id], m2=maps[b2.id], r1=bornes[b1.id], r2=bornes[b2.id];
+    if(!r1||!r2) return {c:null,n:0};
+    const deb=r1[0]>r2[0]?r1[0]:r2[0], fin=r1[1]<r2[1]?r1[1]:r2[1];
+    if(deb>fin) return {c:null,n:0};                       // aucune période commune
+    const ds=[...new Set(Object.keys(m1).concat(Object.keys(m2)))].filter(d=>d>=deb&&d<=fin).sort();
+    if(ds.length<3) return {c:null,n:ds.length};
+    return {c:btPearson(ds.map(d=>m1[d]||0), ds.map(d=>m2[d]||0)), n:ds.length};
+  };
+  const M={}; let pire=null;
+  bts.forEach(b1=>{ M[b1.id]={}; bts.forEach(b2=>{
+    if(b1.id===b2.id){ M[b1.id][b2.id]={c:1,n:null}; return; }
+    const r=paire(b1,b2); M[b1.id][b2.id]=r;
+    if(r.c!==null && (pire===null || r.c>pire.c)) pire={c:r.c, a:b1, b:b2};
+  }); });
+  // Sets tradant le même symbole = redondance potentielle.
+  // Regroupés PAR SYMBOLE : lister chaque paire donnerait 15 lignes pour 6 sets XAUUSD.
+  const parSymbole={};
+  bts.forEach(b=>{ const s=(b.symbol||'').trim().toUpperCase(); if(!s) return; (parSymbole[s]=parSymbole[s]||[]).push(b); });
+  const doublons=Object.keys(parSymbole).filter(s=>parSymbole[s].length>1)
+    .map(s=>({sym:s, sets:parSymbole[s]})).sort((a,b)=>b.sets.length-a.sets.length);
+  return {M,pire,doublons};
+}
+function renderBtCorr(){
+  const card=document.getElementById('btCorrCard'); if(!card) return;
+  const el=document.getElementById('btCorrMatrix'), tag=document.getElementById('btCorrTag');
+  const bts=store.backtests.filter(b=>b.included!==false);
+  if(bts.length<2){
+    card.style.display = store.backtests.length ? 'block' : 'none';
+    el.innerHTML='<div class="empty">Coche au moins 2 backtests dans « portefeuille » pour calculer leur corrélation.</div>';
+    tag.textContent='—'; tag.className='tag a'; return;
+  }
+  card.style.display='block';
+  const {M,pire,doublons}=btCorrCompute(bts);
+  const nom=b=>(b.name||b.symbol||'?');
+  const court=b=>{ const s=nom(b); return s.length>22?s.slice(0,21)+'…':s; };
+  let html='<div style="overflow:auto"><table style="text-align:center;font-size:12.5px"><thead><tr><th></th>'
+    +bts.map(b=>`<th style="text-align:center;min-width:64px" title="${nom(b).replace(/"/g,'&quot;')}">${court(b)}</th>`).join('')+'</tr></thead><tbody>';
+  bts.forEach(b1=>{
+    html+=`<tr><td style="text-align:left;font-weight:500;white-space:nowrap" title="${nom(b1).replace(/"/g,'&quot;')}">${court(b1)}</td>`;
+    bts.forEach(b2=>{
+      const r=M[b1.id][b2.id]; const v=r.c;
+      let cell,bg='var(--panel2)',col='var(--muted)',ti='';
+      if(v===null){ cell='—'; ti=r.n?('seulement '+r.n+' jour(s) commun(s)'):'aucune période commune'; }
+      else {
+        cell=v.toFixed(2);
+        ti=(r.n?r.n+' jours communs':'');
+        if(b1.id!==b2.id){
+          if(v>=0.6){bg='var(--red-soft)';col='#ff9b95';}
+          else if(v>=0.3){bg='var(--amber-soft)';col='#f0cd6e';}
+          else if(v<=-0.3){bg='var(--blue-soft)';col='#9cc7ff';}
+          else {bg='var(--green-soft)';col='#7ee2a0';}
+        }
+      }
+      html+=`<td title="${ti}" style="background:${bg};color:${col};font-weight:500;min-width:62px">${cell}</td>`;
+    });
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+  html+='<div class="help" style="margin-top:8px">Vert = décorrélé (&lt; 0,3) · Orange = lien modéré (0,3–0,6) · Rouge = fortement corrélé (&ge; 0,6) · Bleu = anticorrélé (&le; -0,3, ils se compensent).</div>';
+  if(pire){
+    const c=pire.c;
+    tag.textContent = c>=0.6?'corrélé':c>=0.3?'lien modéré':'décorrélé';
+    tag.className='tag '+(c>=0.6?'r':c>=0.3?'a':'g');
+    html+=`<div class="help" style="margin-top:4px">Paire la plus corrélée : « ${nom(pire.a)} » et « ${nom(pire.b)} » à <b>${c.toFixed(2)}</b>.</div>`;
+  } else { tag.textContent='—'; tag.className='tag a'; }
+  if(doublons.length) html+='<div class="alert warn" style="margin-top:10px"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div>Plusieurs sets tradent le même symbole — regarde leur corrélation ci-dessus avant de conclure au double emploi.<br>'+doublons.map(d=>`<b>${d.sym}</b> : ${d.sets.length} sets (${d.sets.map(b=>court(b)).join(', ')})`).join('<br>')+'</div></div>';
+  el.innerHTML=html;
 }
 
 function renderBtCombo(){
@@ -1104,7 +1245,16 @@ function renderBtCombo(){
     {lab:'Profit factor',val:portPF===Infinity?'∞':fmt(portPF,2),cls:portPF>=1.3?'pos':portPF>=1?'warn':'neg',sub:'identique quel que soit le risque'},
     {lab:'Win rate',val:pct(winRate,1),cls:winRate>=50?'pos':'warn'},
     {lab:'Trades totaux',val:trades.toLocaleString('fr-FR')},
-    {lab:'Mois positifs',val:pct(moisPos,0)+' ('+posM+'/'+mKeys.length+')'}
+    {lab:'Mois positifs',val:pct(moisPos,0)+' ('+posM+'/'+mKeys.length+')'},
+    (function(){
+      const s=btMaxSimul(bts);
+      if(s.max===null) return {lab:'Positions simultanées max',val:'—',sub:'réimporte tes backtests pour l\'obtenir'};
+      const q=s.quand?new Date(s.quand*1000).toLocaleDateString('fr-FR'):null;
+      let sub='sur '+s.avecDonnees+' set'+(s.avecDonnees>1?'s':'')+(q?' · le '+q:'');
+      if(s.sansDonnees) sub+=' · '+s.sansDonnees+' set(s) sans détail, à réimporter';
+      return {lab:'Positions simultanées max', val:String(s.max),
+              cls:s.max>=Math.max(3,Math.ceil(s.avecDonnees*0.6))?'warn':'', sub};
+    })()
   ];
   document.getElementById('btComboStats').innerHTML=cards.map(c=>`<div class="stat"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}" style="font-size:19px">${c.val}</div>${c.sub?`<div class="help">${c.sub}</div>`:''}</div>`).join('');
 }
