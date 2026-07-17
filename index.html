@@ -209,9 +209,9 @@
       <div class="bar" style="margin-top:4px"><span id="riskConsBar" style="width:0%;background:var(--green)"></span></div>
       <div class="meta"><span>Régularité du risque pris trade après trade</span><span id="riskConsScore">—</span></div>
       <div style="overflow:auto;max-height:300px;margin-top:12px">
-        <table id="riskConsTable"><thead><tr><th>Clôture</th><th>Set</th><th>Symbole</th><th>Lots</th><th>Risque $</th><th>Risque %</th><th>vs 0,1 %</th></tr></thead><tbody><tr><td colspan="7" class="empty">Aucune donnée.</td></tr></tbody></table>
+        <table id="riskConsTable"><thead><tr><th>Clôture</th><th>Set</th><th>Symbole</th><th>Lots</th><th>Risque $</th><th>Risque %</th><th id="riskConsVsTh">vs cible</th></tr></thead><tbody><tr><td colspan="7" class="empty">Aucune donnée.</td></tr></tbody></table>
       </div>
-      <div class="help">Risque calculé à l'entrée = distance au SL × lots × valeur du point ÷ solde. Cible 0,1 %. Un risque régulier fait monter ton DScore. Si un symbole est mal évalué, ajuste sa « valeur du point » dans l'onglet Garde-fou.</div>
+      <div class="help">Risque calculé à l'entrée = distance au SL × lots × valeur du point ÷ solde. Cible <span id="riskConsHelpTxt">0,5 %</span>. Un risque régulier fait monter ton DScore. Si un symbole est mal évalué, ajuste sa « valeur du point » dans l'onglet Garde-fou.</div>
     </div>
 
     <div class="card" style="margin-top:14px">
@@ -223,7 +223,7 @@
 
   <!-- SETS -->
   <div class="view" id="v-sets">
-    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Tes sets sont détectés automatiquement par <b>magic number</b> (ou commentaire / symbole). Clique sur un nom pour le renommer — c'est sauvegardé. Risque cible : <b id="riskTargetTxt">0,1 %</b> par trade.</div></div>
+    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Tes sets sont détectés automatiquement par <b>magic number</b> (ou commentaire / symbole). Clique sur un nom pour le renommer — c'est sauvegardé. Risque cible : <b id="riskTargetTxt">0,5 %</b> par trade.</div></div>
     <div class="grid g2" id="setGrid"><div class="empty">Aucun set détecté pour l'instant.</div></div>
   </div>
 
@@ -233,7 +233,7 @@
       <div class="card">
         <h3>Paramètres de risque</h3>
         <div class="field"><label>Capital de référence (USD)</label><input type="number" id="setBalance" value="100000"><div class="help">Pré-rempli depuis ton compte. Le risque se calcule sur ce montant.</div></div>
-        <div class="field"><label>Risque par trade (%)</label><input type="number" id="setRiskPct" value="0.1" step="0.01"></div>
+        <div class="field"><label>Risque par trade (%)</label><input type="number" id="setRiskPct" value="0.5" step="0.01"></div>
         <div class="row">
           <div class="field"><label>Seuil d'alerte drawdown (%)</label><input type="number" id="setDdWarn" value="6" step="0.5"></div>
           <div class="field"><label>Drawdown max toléré (%)</label><input type="number" id="setDdMax" value="10" step="0.5"></div>
@@ -241,7 +241,7 @@
         <button class="primary" id="saveRisk">Enregistrer</button>
       </div>
       <div class="card">
-        <h3>Calculateur de lot (0,1 % par trade)</h3>
+        <h3>Calculateur de lot (<span id="calcLotTitleTxt">0,5 %</span> par trade)</h3>
         <div class="field"><label>Symbole</label><select id="calcSym">
           <option value="forex">Forex (EURUSD, GBPUSD…)</option>
           <option value="jpy">Paire en JPY (USDJPY…)</option>
@@ -281,7 +281,7 @@
       <div class="card">
         <h3>Espérance & R-multiples <span class="tag a" id="expTag">—</span></h3>
         <div id="expBreak"></div>
-        <div class="help">Le « R » exprime chaque résultat en multiple du risque pris (1 R = ta mise de 0,1 %). Espérance = gain moyen par trade en R. Positive = système gagnant. Calculé sur les trades avec SL connu.</div>
+        <div class="help">Le « R » exprime chaque résultat en multiple du risque pris (1 R = ta mise de <span id="rHelpTxt">0,5 %</span>). Espérance = gain moyen par trade en R. Positive = système gagnant. Calculé sur les trades avec SL connu.</div>
       </div>
       <div class="card">
         <h3>Performance par session <span style="font-weight:400;color:var(--dim);font-size:11px">(heure serveur GMT+3)</span></h3>
@@ -307,17 +307,17 @@
         <h3 style="margin:0">Rendements mensuels</h3>
         <select id="heatSource" style="width:auto">
           <option value="live">Live réel</option>
-          <option value="backtest">Portefeuille backtest (÷10)</option>
+          <option value="backtest" id="monthHeatBtOpt">Portefeuille backtest</option>
         </select>
       </div>
       <div id="monthHeat" style="overflow:auto;margin-top:12px"></div>
-      <div class="help">Chaque cellule = rendement du mois (vert = positif, rouge = négatif). Aligné sur le scoring DarwinIA, qui note le rendement mois par mois. Le backtest est ramené à ton risque de 0,1 % (÷10).</div>
+      <div class="help">Chaque cellule = rendement du mois (vert = positif, rouge = négatif). Aligné sur le scoring DarwinIA, qui note le rendement mois par mois. Le backtest est ramené à ton risque de <span id="monthHeatHelpTxt">0,5 % (÷2)</span>.</div>
     </div>
   </div>
 
   <!-- BACKTESTS -->
   <div class="view" id="v-backtests">
-    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Importe le rapport HTML de backtest de chaque set (MT5 Strategy Tester ou relevé). L'app trace les courbes, combine le portefeuille, et le compare à ton live. Backtests à <b id="btRiskTxt">1 %</b>/trade, live à <b>0,1 %</b> — la comparaison est ramenée à la même échelle.</div></div>
+    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Importe le rapport HTML de backtest de chaque set (MT5 Strategy Tester ou relevé). L'app trace les courbes, combine le portefeuille, et le compare à ton live. Backtests à <b id="btRiskTxt">1 %</b>/trade, live à <b id="btLiveRiskTxt">0,5 %</b> — la comparaison est ramenée à la même échelle.</div></div>
 
     <div class="dz" id="btDrop"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:26px;height:26px"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg><div style="margin-top:8px">Glisse ici les rapports HTML de tes backtests<br>ou <label style="color:var(--accent);cursor:pointer;text-decoration:underline">parcours tes fichiers<input type="file" id="btFile" accept=".htm,.html" multiple style="display:none"></label></div></div>
 
@@ -351,9 +351,9 @@
             <option value="sincelive">Depuis le live</option>
           </select>
           <select id="btNorm" style="width:auto">
-            <option value="scaled">Équivalent 0,1 % (÷10)</option>
+            <option value="scaled" id="btNormScaledOpt">Équivalent au risque live</option>
             <option value="base100">Base 100 (forme)</option>
-            <option value="raw">% réels bruts</option>
+            <option value="raw">% réels bruts (1 %)</option>
           </select>
         </div>
       </div>
@@ -394,8 +394,8 @@ let fileHandle=null, pollTimer=null, lastData=null, chart=null, lastA=null, cvMa
 const LS='dzcockpit.v1';
 function loadStore(){ try{return JSON.parse(localStorage.getItem(LS))||{}}catch(e){return{}} }
 function saveStore(s){ localStorage.setItem(LS,JSON.stringify(s)); }
-let store = Object.assign({setNames:{}, equitySnaps:[], settings:{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10}}, loadStore());
-store.setNames=store.setNames||{}; store.equitySnaps=store.equitySnaps||[]; store.settings=store.settings||{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10};
+let store = Object.assign({setNames:{}, equitySnaps:[], settings:{balance:100000,riskPct:0.5,ddWarn:6,ddMax:10}}, loadStore());
+store.setNames=store.setNames||{}; store.equitySnaps=store.equitySnaps||[]; store.settings=store.settings||{balance:100000,riskPct:0.5,ddWarn:6,ddMax:10};
 // Correspondance magic number -> nom du backtest (tes renommages manuels restent prioritaires).
 const DEFAULT_SET_NAMES = {
   "magic:1":"2002 eurusd 4h swing 15m entry",
@@ -424,6 +424,41 @@ const fmt=(n,d=2)=>Number(n).toLocaleString('fr-FR',{minimumFractionDigits:d,max
 const money=n=>fmt(n,2)+' $';
 const pct=(n,d=2)=>fmt(n,d)+' %';
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+
+/* ---------- risque : backtests (1 %) -> live (risque cible) ----------
+   Les rapports MT5 importés sont tous lancés à 1 % de risque par trade.
+   Le live tourne au risque défini dans Garde-fou risque (0,5 % par défaut).
+   Pour comparer, on ramène les backtests à l'échelle du live.
+   Hypothèse (déjà celle de l'app) : rendement et drawdown varient
+   proportionnellement au risque. Approximation : la composition exacte
+   diffère un peu, mais l'ordre de grandeur est juste. */
+const BT_RISK = 1;
+const riskCible = () => Number(store.settings.riskPct) || 0.5;
+const btScale = () => riskCible() / BT_RISK;
+/* "1 %", "0,5 %", "0,25 %" : on n'affiche que les décimales utiles. */
+const riskTxt = () => {
+  const r = riskCible(), c = Math.round(r*100);
+  return pct(r, c%100===0 ? 0 : (c%10===0 ? 1 : 2));
+};
+/* "÷2" pour 0,5 %, "÷10" pour 0,1 %, "÷3,3" pour 0,3 %... */
+function btDivTxt(){
+  const d = BT_RISK / riskCible();
+  return '÷' + ((Math.abs(d-Math.round(d))<0.01) ? String(Math.round(d)) : fmt(d,1));
+}
+/* Libellés figés dans le HTML : on les réaligne sur le risque courant.
+   Appelé aussi au démarrage, car render() sort tôt s'il n'y a pas de données. */
+function majLibellesRisque(){
+  const set=(id,txt)=>{ const e=document.getElementById(id); if(e) e.textContent=txt; };
+  set('riskTargetTxt', riskTxt());
+  set('riskConsHelpTxt', riskTxt());
+  set('calcLotTitleTxt', riskTxt());
+  set('rHelpTxt', riskTxt());
+  set('btLiveRiskTxt', riskTxt());
+  set('riskConsVsTh', 'vs '+riskTxt());
+  set('btNormScaledOpt', 'Équivalent '+riskTxt()+' ('+btDivTxt()+')');
+  set('monthHeatBtOpt', 'Portefeuille backtest ('+btDivTxt()+')');
+  set('monthHeatHelpTxt', riskTxt()+' ('+btDivTxt()+')');
+}
 const pick=(o,keys)=>{for(const k of keys){if(o[k]!==undefined&&o[k]!==null&&o[k]!=='')return o[k];}return undefined;};
 
 /* normalize a trade object from an unknown-but-MT5-ish schema */
@@ -608,7 +643,7 @@ function renderAdvice(a){
 
 function setHealth(g){ const tot=g.pl+g.floating; if(tot>0)return ['g','sain']; if(tot> -200)return ['a','neutre']; return ['r','en perte']; }
 function renderSets(a){
-  document.getElementById('riskTargetTxt').textContent=pct(store.settings.riskPct,2).replace('.',',');
+  majLibellesRisque();
   const gs=Object.values(a.groups).sort((x,y)=>(y.pl+y.floating)-(x.pl+x.floating));
   const grid=document.getElementById('setGrid');
   if(!gs.length){grid.innerHTML='<div class="empty">Aucun set détecté pour l\'instant. Dès qu\'un trade apparaît dans le fichier, ses sets s\'afficheront ici.</div>';return;}
@@ -714,7 +749,7 @@ function tradeRisk(t, balance){
 function renderDarwinTab(a){ const c=computeCorr(a); renderRiskConsistency(a); renderCorrelation(a,c); renderDarwinIA(a,c); }
 
 function renderRiskConsistency(a){
-  const target=store.settings.riskPct||0.1;
+  const target=riskCible();
   const withRisk=[];
   a.trades.forEach(t=>{const r=tradeRisk(t,a.balance); if(r) withRisk.push({t,r});});
   const tb=document.querySelector('#riskConsTable tbody');
@@ -1000,18 +1035,18 @@ function renderBacktests(a){
       </div>
       <button class="ghost sm" data-del="${b.id}">✕ retirer</button></div>
     <div class="grid g4" style="margin-top:10px">
-      <div class="stat" style="background:var(--panel2)"><div class="lab">Rendement (1 %)</div><div class="val ${s.rendementNet>=0?'pos':'neg'}" style="font-size:18px">${pct(s.rendementNet,1)}</div></div>
-      <div class="stat" style="background:var(--panel2)"><div class="lab">Drawdown max</div><div class="val" style="font-size:18px">${pct(s.maxDDpct,1)}</div></div>
-      <div class="stat" style="background:var(--panel2)"><div class="lab">Profit factor</div><div class="val" style="font-size:18px">${s.pf==null?'—':fmt(s.pf,2)}</div></div>
-      <div class="stat" style="background:var(--panel2)"><div class="lab">Trades</div><div class="val" style="font-size:18px">${s.nbTrades}</div></div>
+      <div class="stat" style="background:var(--panel2)"><div class="lab">Rendement (${riskTxt()})</div><div class="val ${s.rendementNet>=0?'pos':'neg'}" style="font-size:18px">${pct(s.rendementNet*btScale(),1)}</div><div class="help">backtest à 1 % : ${pct(s.rendementNet,1)}</div></div>
+      <div class="stat" style="background:var(--panel2)"><div class="lab">Drawdown max (${riskTxt()})</div><div class="val" style="font-size:18px">${pct(s.maxDDpct*btScale(),1)}</div><div class="help">backtest à 1 % : ${pct(s.maxDDpct,1)}</div></div>
+      <div class="stat" style="background:var(--panel2)"><div class="lab">Profit factor</div><div class="val" style="font-size:18px">${s.pf==null?'—':fmt(s.pf,2)}</div><div class="help">identique quel que soit le risque</div></div>
+      <div class="stat" style="background:var(--panel2)"><div class="lab">Trades</div><div class="val" style="font-size:18px">${s.nbTrades}</div><div class="help">identique quel que soit le risque</div></div>
     </div>
     ${(function(){
       const mg=(b.magic!=null&&b.magic!=='')?String(b.magic):(autoMagic(b.name)||'');
-      const btDD10=(s.maxDDpct||0)/10;
+      const btDDs=(s.maxDDpct||0)*btScale();
       let cmp;
       if(!mg){ cmp='<span style="color:var(--dim)">renseigne le magic du set live pour comparer le drawdown</span>'; }
-      else if(!liveDD[mg]||!liveDD[mg].n){ cmp='DD réel : <b>—</b> <span style="color:var(--dim)">(pas encore de trade live)</span> &nbsp;·&nbsp; réf. backtest ÷10 : <b>'+pct(btDD10,2)+'</b>'; }
-      else { const ld=liveDD[mg].dd, over=ld>btDD10; cmp='DD réel (0,1 %) : <b class="'+(over?'neg':'pos')+'">'+pct(ld,2)+'</b> &nbsp;·&nbsp; réf. backtest ÷10 : <b>'+pct(btDD10,2)+'</b> &nbsp;·&nbsp; '+(over?'🔴 dépasse la réf.':'🟢 sous la réf.'); }
+      else if(!liveDD[mg]||!liveDD[mg].n){ cmp='DD réel : <b>—</b> <span style="color:var(--dim)">(pas encore de trade live)</span> &nbsp;·&nbsp; réf. backtest '+btDivTxt()+' : <b>'+pct(btDDs,2)+'</b>'; }
+      else { const ld=liveDD[mg].dd, over=ld>btDDs; cmp='DD réel ('+riskTxt()+') : <b class="'+(over?'neg':'pos')+'">'+pct(ld,2)+'</b> &nbsp;·&nbsp; réf. backtest '+btDivTxt()+' : <b>'+pct(btDDs,2)+'</b> &nbsp;·&nbsp; '+(over?'🔴 dépasse la réf.':'🟢 sous la réf.'); }
       return '<div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;font-size:12.5px"><label style="font-size:12px;color:var(--muted);margin:0">Set live (magic) :</label><input type="number" class="bt-magic" data-id="'+b.id+'" value="'+mg+'" placeholder="—" style="width:88px;padding:5px 8px"><span style="flex:1;min-width:220px">'+cmp+'</span></div>';
     })()}
     <div class="help" style="margin-top:10px">${b.symbol||''}${b.period?(' · '+b.period):''} · dépôt ${money(b.deposit)} · ${s.months} mois · ${fmt(s.winRate,1)} % réussite</div>
@@ -1063,16 +1098,15 @@ function renderBtCombo(){
   const moisPos = mKeys.length ? posM/mKeys.length*100 : 0;
   document.getElementById('btComboMeta').textContent=(dates.length?(dates[0]+' → '+dates[dates.length-1]):'')+(mKeys.length?(' · '+mKeys.length+' mois · '+bts.length+' sets'):'');
   const cards=[
-    {lab:'Rendement total (1 %)',val:pct(run,1),cls:run>=0?'pos':'neg'},
-    {lab:'Équivalent 0,1 % (÷10)',val:pct(run/10,1),cls:run>=0?'pos':'neg'},
-    {lab:'Drawdown max',val:pct(mdd,1),cls:'warn'},
-    {lab:'Recovery factor',val:recovery===Infinity?'∞':fmt(recovery,1)},
-    {lab:'Profit factor',val:portPF===Infinity?'∞':fmt(portPF,2),cls:portPF>=1.3?'pos':portPF>=1?'warn':'neg'},
+    {lab:'Rendement total ('+riskTxt()+')',val:pct(run*btScale(),1),cls:run>=0?'pos':'neg',sub:'backtest à 1 % : '+pct(run,1)},
+    {lab:'Drawdown max ('+riskTxt()+')',val:pct(mdd*btScale(),1),cls:'warn',sub:'backtest à 1 % : '+pct(mdd,1)},
+    {lab:'Recovery factor',val:recovery===Infinity?'∞':fmt(recovery,1),sub:'identique quel que soit le risque'},
+    {lab:'Profit factor',val:portPF===Infinity?'∞':fmt(portPF,2),cls:portPF>=1.3?'pos':portPF>=1?'warn':'neg',sub:'identique quel que soit le risque'},
     {lab:'Win rate',val:pct(winRate,1),cls:winRate>=50?'pos':'warn'},
     {lab:'Trades totaux',val:trades.toLocaleString('fr-FR')},
     {lab:'Mois positifs',val:pct(moisPos,0)+' ('+posM+'/'+mKeys.length+')'}
   ];
-  document.getElementById('btComboStats').innerHTML=cards.map(c=>`<div class="stat"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}" style="font-size:19px">${c.val}</div></div>`).join('');
+  document.getElementById('btComboStats').innerHTML=cards.map(c=>`<div class="stat"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}" style="font-size:19px">${c.val}</div>${c.sub?`<div class="help">${c.sub}</div>`:''}</div>`).join('');
 }
 
 function renderBtCompare(a){
@@ -1089,7 +1123,7 @@ function renderBtCompare(a){
   let btMap=btFull;
   if(period==='sincelive'){ btMap={}; Object.keys(btFull).forEach(d=>{ if(d>=startISO) btMap[d]=btFull[d]; }); }
   const labels=[...new Set([...Object.keys(btMap),...Object.keys(liveDayPct)])].sort();
-  const scaleBt = norm==='scaled' ? (store.settings.riskPct||0.1)/1 : 1;
+  const scaleBt = norm==='scaled' ? btScale() : 1;
   const base = norm==='base100'?100:0;
   function cumAligned(map, scale){
     const ds=Object.keys(map).sort(); if(!ds.length) return {series:labels.map(()=>null), total:0};
@@ -1100,13 +1134,13 @@ function renderBtCompare(a){
   const live=cumAligned(liveDayPct,1);
   const bt=cumAligned(btMap,scaleBt);
   const datasets=[{label:'Live réel',data:live.series,borderColor:'#388bfd',fill:false,tension:.2,pointRadius:2,borderWidth:2,spanGaps:false}];
-  if(bts.length) datasets.push({label:'Portefeuille backtest'+(norm==='scaled'?' ÷10':''),data:bt.series,borderColor:'#d29922',borderDash:[5,4],fill:false,tension:.15,pointRadius:0,borderWidth:2,spanGaps:false});
+  if(bts.length) datasets.push({label:'Portefeuille backtest'+(norm==='scaled'?' '+btDivTxt():''),data:bt.series,borderColor:'#d29922',borderDash:[5,4],fill:false,tension:.15,pointRadius:0,borderWidth:2,spanGaps:false});
   if(cv._chart)cv._chart.destroy();
   cv._chart=new Chart(cv,{type:'line',data:{labels,datasets},options:{plugins:{legend:{display:true,labels:{color:'#8b95a5',boxWidth:12}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y}${norm==='base100'?'':' %'}`}}},scales:{x:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',maxTicksLimit:9}},y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',callback:v=>v+(norm==='base100'?'':' %')}}}}});
   if(!bts.length){ note.textContent = store.backtests.length ? 'Coche au moins un backtest (« portefeuille ») pour le comparer à ton live.' : 'Importe tes backtests ci-dessus pour superposer la référence à ton live.'; return; }
   const lr=live.total||0, br=bt.total||0;
-  if(period==='sincelive'){ const diff=lr-br; note.textContent=`Depuis ${startISO} : live ${pct(lr,2)} vs backtest${norm==='scaled'?' (÷10)':''} ${pct(br,2)}. `+(Math.abs(diff)<0.05?'Le live suit la référence. 👍':(diff>0?'Le live surperforme la référence.':'Le live sous-performe la référence — à surveiller.')); }
-  else { note.textContent=`Portefeuille backtesté complet (${labels[0]} → ${labels[labels.length-1]}) : ${pct(br,1)}${norm==='scaled'?' (÷10)':''}. Ton live (${pct(lr,2)} depuis ${startISO}) apparaît à droite — c'est normal qu'il soit court au début, il s'étoffera avec le temps.`; }
+  if(period==='sincelive'){ const diff=lr-br; note.textContent=`Depuis ${startISO} : live ${pct(lr,2)} vs backtest${norm==='scaled'?' ('+btDivTxt()+')':''} ${pct(br,2)}. `+(Math.abs(diff)<0.05?'Le live suit la référence. 👍':(diff>0?'Le live surperforme la référence.':'Le live sous-performe la référence — à surveiller.')); }
+  else { note.textContent=`Portefeuille backtesté complet (${labels[0]} → ${labels[labels.length-1]}) : ${pct(br,1)}${norm==='scaled'?' ('+btDivTxt()+')':''}. Ton live (${pct(lr,2)} depuis ${startISO}) apparaît à droite — c'est normal qu'il soit court au début, il s'étoffera avec le temps.`; }
 }
 
 /* ---------- #2 fraîcheur des données ---------- */
@@ -1130,14 +1164,14 @@ function renderHeat(a){
   if(!bar)return;
   const open=a.open||[];
   const nSets=Object.keys(store.setNames).filter(k=>k.indexOf('magic:')===0).length||13;
-  const maxHeat=Math.max((store.settings.riskPct||0.1)*nSets, 1.3);
+  const maxHeat=Math.max(riskCible()*nSets, 1.3);
   if(!open.length){ bar.style.width='0%'; bar.style.background='var(--green)'; txt.textContent='0,00 % · aucune position ouverte'; if(help)help.textContent='Aucune position ouverte exportée. (Nécessite un EA exportateur qui liste aussi les positions ouvertes.)'; return; }
   let sum=0, unknown=0;
   open.forEach(t=>{ const r=tradeRisk(t,a.balance); if(r)sum+=r.pct; else unknown++; });
   bar.style.width=clamp(sum/maxHeat*100,0,100)+'%';
   bar.style.background = sum>=maxHeat*0.8?'var(--red)':sum>=maxHeat*0.5?'var(--amber)':'var(--green)';
   txt.textContent=pct(sum,3)+' engagé'+(unknown?(' · '+unknown+' sans SL'):'');
-  if(help)help.textContent=open.length+' position(s) ouverte(s) · capacité indicative si tout ouvre à '+pct(store.settings.riskPct||0.1,2)+' : ~'+pct(maxHeat,2);
+  if(help)help.textContent=open.length+' position(s) ouverte(s) · capacité indicative si tout ouvre à '+riskTxt()+' : ~'+pct(maxHeat,2);
 }
 
 /* ---------- #6 heatmap des rendements mensuels ---------- */
@@ -1146,7 +1180,7 @@ function monthlyReturns(source,a){
   if(source==='backtest'){
     const bts=store.backtests.filter(b=>b.included!==false);
     bts.forEach(b=>b.days.forEach(([d,pnl])=>{ const k=d.slice(0,7); m[k]=(m[k]||0)+pnl/b.deposit*100; }));
-    const scale=(store.settings.riskPct||0.1)/1; Object.keys(m).forEach(k=>m[k]*=scale);
+    const scale=btScale(); Object.keys(m).forEach(k=>m[k]*=scale);
   } else {
     const dep=a.dep||100000;
     a.closed.forEach(t=>{ if(!t.closeTime)return; const k=t.closeTime.toISOString().slice(0,7); m[k]=(m[k]||0)+t.profit/dep*100; });
@@ -1175,7 +1209,7 @@ function renderMonthHeat(a){
 /* ---------- lot calculator ---------- */
 function calcLot(){
   const bal=Number(document.getElementById('setBalance').value)||100000;
-  const risk=Number(document.getElementById('setRiskPct').value)||0.1;
+  const risk=Number(document.getElementById('setRiskPct').value)||0.5;
   const sl=Number(document.getElementById('calcSl').value)||1;
   const pv=Number(document.getElementById('calcPipVal').value)||10;
   const riskUsd=bal*risk/100;
@@ -1188,8 +1222,9 @@ document.getElementById('calcSym').addEventListener('change',e=>{const d={forex:
 
 /* ---------- settings save ---------- */
 document.getElementById('saveRisk').addEventListener('click',()=>{
-  store.settings={balance:Number(document.getElementById('setBalance').value)||100000,riskPct:Number(document.getElementById('setRiskPct').value)||0.1,ddWarn:Number(document.getElementById('setDdWarn').value)||6,ddMax:Number(document.getElementById('setDdMax').value)||10};
-  saveStore(store); render(); flash('Paramètres enregistrés');
+  store.settings={balance:Number(document.getElementById('setBalance').value)||100000,riskPct:Number(document.getElementById('setRiskPct').value)||0.5,ddWarn:Number(document.getElementById('setDdWarn').value)||6,ddMax:Number(document.getElementById('setDdMax').value)||10};
+  // renderBacktests : les cartes affichent le risque cible, render() ne les redessine pas.
+  saveStore(store); render(); majLibellesRisque(); renderBacktests(lastA); flash('Paramètres enregistrés');
 });
 function flash(msg){const el=document.getElementById('syncTxt');const p=document.getElementById('syncPill');p.style.display='';el.textContent=msg;setTimeout(()=>updateSyncLabel(),2500);}
 
@@ -1288,6 +1323,7 @@ document.getElementById('btnRefresh').addEventListener('click',()=>{ if(SERVER_M
   document.getElementById('setRiskPct').value=store.settings.riskPct;
   document.getElementById('setDdWarn').value=store.settings.ddWarn;
   document.getElementById('setDdMax').value=store.settings.ddMax;
+  majLibellesRisque();
   calcLot();
   renderBacktests(lastA);
 })();
