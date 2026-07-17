@@ -347,6 +347,7 @@
       <h3>Portefeuille combiné <span id="btComboMeta" style="font-weight:400;color:var(--dim);font-size:11px"></span></h3>
       <canvas id="btComboChart" height="100"></canvas>
       <div class="grid g4" id="btComboStats" style="margin-top:14px"></div>
+      <div class="help" style="margin-top:10px" id="btComboNote"></div>
     </div>
 
     <div class="card" style="margin-top:14px" id="btCorrCard">
@@ -1040,9 +1041,12 @@ function btImportFile(file){
   reader.readAsArrayBuffer(file);
 }
 
-function makeLineChart(cv, labels, datasets, unit){
+/* fmtVal (optionnel) : formate les valeurs de l'axe Y et des infobulles.
+   Sans lui, comportement d'origine inchangé (valeur brute + unité). */
+function makeLineChart(cv, labels, datasets, unit, fmtVal){
+  const f = fmtVal || (v=>v+(unit||''));
   if(cv._chart)cv._chart.destroy();
-  cv._chart=new Chart(cv,{type:'line',data:{labels,datasets},options:{plugins:{legend:{display:datasets.length>1,labels:{color:'#8b95a5',boxWidth:12}},tooltip:{callbacks:{label:c=>c.dataset.label?`${c.dataset.label}: ${c.parsed.y}${unit||''}`:`${c.parsed.y}${unit||''}`}}},scales:{x:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',maxTicksLimit:8}},y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',callback:v=>v+(unit||'')}}}}});
+  cv._chart=new Chart(cv,{type:'line',data:{labels,datasets},options:{plugins:{legend:{display:datasets.length>1,labels:{color:'#8b95a5',boxWidth:12}},tooltip:{callbacks:{label:c=>c.dataset.label?`${c.dataset.label}: ${f(c.parsed.y)}`:f(c.parsed.y)}}},scales:{x:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',maxTicksLimit:8}},y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',callback:v=>f(v)}}}}});
 }
 function btCumul(days, deposit){ let run=0; const L=[],D=[]; days.forEach(([d,pnl])=>{run+=pnl/deposit*100; L.push(d); D.push(round2(run));}); return {L,D}; }
 
@@ -1080,7 +1084,14 @@ function renderBacktests(a){
   const srSel=document.getElementById('btStatRisk'); if(srSel) srSel.value=String(btStatRisk());
   const liveDD={};
   if(a&&a.groups){ Object.keys(a.groups).forEach(k=>{ if(k.indexOf('magic:')===0) liveDD[k.slice(6)]={dd:setDD(a.groups[k]),n:a.groups[k].closed.length}; }); }
-  list.innerHTML=bts.map(b=>{ const s=b.stats; const inc=b.included!==false; return `<div class="card" style="margin-bottom:10px;${inc?'':'opacity:.5'}">
+  list.innerHTML=bts.map(b=>{ const s=b.stats; const inc=b.included!==false;
+    // À 1 % : les chiffres du rapport MT5 font foi (drawdown mesuré trade par trade).
+    // Sinon : on REJOUE le set au risque choisi. Diviser linéairement serait faux,
+    // les gains étant composés.
+    const simB = btStatEchelle() ? btSimuleCompteUnique([b], Number(b.deposit)||100000, btStatScale()) : null;
+    const rendAff = simB ? simB.rendement : s.rendementNet;
+    const ddAff   = simB ? simB.mdd       : s.maxDDpct;
+    return `<div class="card" style="margin-bottom:10px;${inc?'':'opacity:.5'}">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
       <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
         <label title="Inclure dans le portefeuille combiné" style="display:flex;align-items:center;gap:6px;margin:0;font-size:12px;color:var(--muted);white-space:nowrap;cursor:pointer">
@@ -1089,8 +1100,8 @@ function renderBacktests(a){
       </div>
       <button class="ghost sm" data-del="${b.id}">✕ retirer</button></div>
     <div class="grid g4" style="margin-top:10px">
-      <div class="stat" style="background:var(--panel2)"><div class="lab">Rendement (${btStatTxt()})</div><div class="val ${s.rendementNet>=0?'pos':'neg'}" style="font-size:18px">${pct(s.rendementNet*btStatScale(),1)}</div><div class="help">${btStatEchelle()?('backtest à 1 % : '+pct(s.rendementNet,1)+' ('+btStatDivTxt()+')'):'risque brut du backtest'}</div></div>
-      <div class="stat" style="background:var(--panel2)"><div class="lab">Drawdown max (${btStatTxt()})</div><div class="val" style="font-size:18px">${pct(s.maxDDpct*btStatScale(),1)}</div><div class="help">${btStatEchelle()?('backtest à 1 % : '+pct(s.maxDDpct,1)+' ('+btStatDivTxt()+')'):'risque brut du backtest'}</div></div>
+      <div class="stat" style="background:var(--panel2)"><div class="lab">Rendement (${btStatTxt()})</div><div class="val ${rendAff>=0?'pos':'neg'}" style="font-size:18px">${pct(rendAff,1)}</div><div class="help">${btStatEchelle()?('à 1 % : '+pct(s.rendementNet,1)):'risque brut du backtest'}</div></div>
+      <div class="stat" style="background:var(--panel2)"><div class="lab">Drawdown max (${btStatTxt()})</div><div class="val" style="font-size:18px">${pct(ddAff,1)}</div><div class="help">${btStatEchelle()?('à 1 % : '+pct(s.maxDDpct,1)):'risque brut du backtest'}</div></div>
       <div class="stat" style="background:var(--panel2)"><div class="lab">Profit factor</div><div class="val" style="font-size:18px">${s.pf==null?'—':fmt(s.pf,2)}</div><div class="help">identique quel que soit le risque</div></div>
       <div class="stat" style="background:var(--panel2)"><div class="lab">Trades</div><div class="val" style="font-size:18px">${s.nbTrades}</div><div class="help">identique quel que soit le risque</div></div>
     </div>
@@ -1235,39 +1246,99 @@ function renderBtCorr(){
   el.innerHTML=html;
 }
 
+/* ---------- simulation sur un COMPTE UNIQUE (capital commun) ----------
+   Chaque set a été backtesté SEUL sur son propre dépôt, en composant ses gains
+   (vérifié sur les rapports : les lots grossissent avec le solde, ratio volume
+   3,18 vs ratio solde 3,38). Additionner les rendements ne décrit donc aucun
+   compte réel : ça revient à supposer 14 comptes séparés.
+
+   On neutralise la composition interne de chaque set en repassant par le
+   rendement par unité de capital :
+       r_i(j) = pnl_i(j) / solde_i(j-1)
+   Sur un compte commun, chaque set dimensionne ses lots sur le capital COMMUN,
+   donc sa contribution du jour vaut r_i(j) × B(j-1). D'où la vraie courbe :
+       B(j) = B(j-1) × (1 + Σ_i r_i(j))
+   `echelle` rejoue le tout à 0,5 % ou 0,1 % au lieu du 1 % d'origine. */
+function btSimuleCompteUnique(bts, capital, echelle){
+  const parJour={};
+  bts.forEach(b=>{
+    let solde=Number(b.deposit)||capital;
+    (b.days||[]).forEach(d=>{
+      if(solde>0) parJour[d[0]]=(parJour[d[0]]||0)+d[1]/solde;
+      solde+=d[1];
+    });
+  });
+  const dates=Object.keys(parJour).sort();
+  let B=capital, pic=capital, mdd=0, ruine=false;
+  const parMois={};
+  const serie=dates.map(d=>{
+    if(!ruine){
+      const avant=B;
+      B=B*(1+parJour[d]*echelle);
+      if(B<=0){ B=0; ruine=true; }
+      if(B>pic) pic=B;
+      const dd=pic>0?(pic-B)/pic*100:0; if(dd>mdd) mdd=dd;
+      const m=d.slice(0,7);
+      if(!parMois[m]) parMois[m]={debut:avant,fin:B}; else parMois[m].fin=B;
+    }
+    return round2(B);
+  });
+  const mois=Object.keys(parMois);
+  const moisPos=mois.filter(m=>parMois[m].fin>parMois[m].debut).length;
+  return { dates, serie, capital, final:B, mdd, ruine,
+           rendement: capital>0?(B-capital)/capital*100:0,
+           mois:mois.length, moisPos, moisPositifs: mois.length?moisPos/mois.length*100:0 };
+}
+
 function renderBtCombo(){
   const card=document.getElementById('btComboCard'); const bts=store.backtests.filter(b=>b.included!==false);
   if(!bts.length){card.style.display='none';return;} card.style.display='';
-  const dayPct={}; bts.forEach(b=>b.days.forEach(([d,pnl])=>{dayPct[d]=(dayPct[d]||0)+pnl/b.deposit*100;}));
-  const dates=Object.keys(dayPct).sort();
-  let run=0,pk=0,mdd=0; const D=dates.map(d=>{run+=dayPct[d]; if(run>pk)pk=run; const dd=pk-run; if(dd>mdd)mdd=dd; return round2(run);});
-  makeLineChart(document.getElementById('btComboChart'),dates,[{data:D,borderColor:'#2ea043',backgroundColor:'rgba(46,160,67,.10)',fill:true,tension:.2,pointRadius:0,borderWidth:2}],' %');
-  // ---- statistiques globales du portefeuille ----
-  let gW=0, gL=0, trades=0, winsW=0; const monthly={};
+  // ---- capital commun ----
+  const deps=[...new Set(bts.map(b=>Math.round(Number(b.deposit)||0)).filter(d=>d>0))];
+  const capitalUniforme = deps.length===1;
+  const capital = capitalUniforme ? deps[0] : 100000;
+  const money0 = n => fmt(n,0)+' $';   // gros montants : les centimes n'apportent rien
+
+  // ---- simulation sur ce capital unique (vraie courbe composée) ----
+  const sim  = btSimuleCompteUnique(bts, capital, btStatScale());
+  // Référence à 1 % : il faut la RESIMULER. Avec composition, diviser le risque
+  // par 2 ne divise PAS le rendement par 2 — la règle "÷2" n'a plus cours.
+  const sim1 = btStatEchelle() ? btSimuleCompteUnique(bts, capital, 1) : sim;
+
+  const gain = sim.final - capital;
+  makeLineChart(document.getElementById('btComboChart'), sim.dates,
+    [{data:sim.serie,borderColor:'#2ea043',backgroundColor:'rgba(46,160,67,.10)',fill:true,tension:.2,pointRadius:0,borderWidth:2}],
+    ' $', v=>money0(v));
+
+  // ---- statistiques indépendantes du capital ----
+  let gW=0, gL=0, trades=0, winsW=0;
   bts.forEach(b=>{ const s=b.stats;
     trades += s.nbTrades||0; winsW += (s.winRate||0)/100*(s.nbTrades||0);
     const net=s.net||0, pf=s.pf;
     if(pf==null||!isFinite(pf)){ gW+=Math.max(net,0); gL+=Math.max(-net,0); }
     else if(Math.abs(pf-1)<1e-9){ gW+=Math.abs(net)/2; gL+=Math.abs(net)/2; }
     else { const gl=net/(pf-1); gL+=gl; gW+=pf*gl; }
-    b.days.forEach(([d,pnl])=>{ const m=d.slice(0,7); monthly[m]=(monthly[m]||0)+pnl/b.deposit*100; });
   });
   const portPF = gL>0 ? gW/gL : (gW>0?Infinity:0);
   const winRate = trades ? winsW/trades*100 : 0;
-  const recovery = mdd>0 ? run/mdd : (run>0?Infinity:0);
-  const mKeys=Object.keys(monthly); const posM=mKeys.filter(m=>monthly[m]>0).length;
-  const moisPos = mKeys.length ? posM/mKeys.length*100 : 0;
-  document.getElementById('btComboMeta').textContent=(dates.length?(dates[0]+' → '+dates[dates.length-1]):'')+(mKeys.length?(' · '+mKeys.length+' mois · '+bts.length+' sets'):'');
+  const recovery = sim.mdd>0 ? sim.rendement/sim.mdd : (sim.rendement>0?Infinity:0);
+  const mKeys={length:sim.mois};
+  document.getElementById('btComboMeta').textContent=(sim.dates.length?(sim.dates[0]+' → '+sim.dates[sim.dates.length-1]):'')+(sim.mois?(' · '+sim.mois+' mois · '+bts.length+' sets · compte unique'):'');
+
   const cards=[
-    {lab:'Rendement total ('+btStatTxt()+')',val:pct(run*btStatScale(),1),cls:run>=0?'pos':'neg',
-     sub:btStatEchelle()?('backtest à 1 % : '+pct(run,1)+' ('+btStatDivTxt()+')'):'risque brut du backtest'},
-    {lab:'Drawdown max ('+btStatTxt()+')',val:pct(mdd*btStatScale(),1),cls:'warn',
-     sub:btStatEchelle()?('backtest à 1 % : '+pct(mdd,1)+' ('+btStatDivTxt()+')'):'risque brut du backtest'},
-    {lab:'Recovery factor',val:recovery===Infinity?'∞':fmt(recovery,1),sub:'identique quel que soit le risque'},
+    {lab:'Capital de départ',val:money0(capital),
+     sub:capitalUniforme?'dépôt initial des backtests':'dépôts différents selon les sets — 100 000 $ retenu par défaut'},
+    {lab:'Balance finale ('+btStatTxt()+')',val:sim.ruine?'0 $ (ruine)':money0(sim.final),cls:gain>=0?'pos':'neg',
+     sub:(gain>=0?'gain : +':'perte : ')+money0(gain)},
+    {lab:'Rendement total ('+btStatTxt()+')',val:pct(sim.rendement,1),cls:sim.rendement>=0?'pos':'neg',
+     sub:btStatEchelle()?('à 1 % : '+pct(sim1.rendement,1)):'risque brut du backtest'},
+    {lab:'Drawdown max ('+btStatTxt()+')',val:pct(sim.mdd,1),cls:'warn',
+     sub:btStatEchelle()?('à 1 % : '+pct(sim1.mdd,1)):'risque brut du backtest'},
+    {lab:'Recovery factor',val:recovery===Infinity?'∞':fmt(recovery,1),sub:'rendement ÷ drawdown max'},
     {lab:'Profit factor',val:portPF===Infinity?'∞':fmt(portPF,2),cls:portPF>=1.3?'pos':portPF>=1?'warn':'neg',sub:'identique quel que soit le risque'},
     {lab:'Win rate',val:pct(winRate,1),cls:winRate>=50?'pos':'warn'},
     {lab:'Trades totaux',val:trades.toLocaleString('fr-FR')},
-    {lab:'Mois positifs',val:pct(moisPos,0)+' ('+posM+'/'+mKeys.length+')'},
+    {lab:'Mois positifs',val:pct(sim.moisPositifs,0)+' ('+sim.moisPos+'/'+sim.mois+')',sub:'mois où le compte commun a progressé'},
     (function(){
       const s=btMaxSimul(bts);
       if(s.max===null) return {lab:'Positions simultanées max',val:'—',sub:'réimporte tes backtests pour l\'obtenir'};
@@ -1279,6 +1350,19 @@ function renderBtCombo(){
     })()
   ];
   document.getElementById('btComboStats').innerHTML=cards.map(c=>`<div class="stat"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}" style="font-size:19px">${c.val}</div>${c.sub?`<div class="help">${c.sub}</div>`:''}</div>`).join('');
+  const note=document.getElementById('btComboNote');
+  if(note){
+    const mult = capital>0 ? sim.final/capital : 0;
+    let t='Simulation sur un <b>compte unique de '+money0(capital)+'</b> : les '+bts.length+' sets partagent le même capital, chacun '
+      +'dimensionnant ses lots à '+btStatTxt()+' de ce capital <i>commun</i>, gains réinvestis (intérêts composés). Ce n\'est PAS l\'addition des rendements individuels.';
+    if(mult>=10) t+='<br>🔴 <b>Ce montant n\'est pas atteignable en pratique.</b> Il vient de la composition : '+bts.length+' sets qui risquent chacun '
+      +btStatTxt()+' d\'un capital qui grossit sans limite. Passé quelques millions, les lots requis dépassent la liquidité du marché, '
+      +'les limites du broker et les règles Darwinex. Lis-le comme « ce risque est très agressif », pas comme un objectif : '
+      +'baisse le sélecteur à 0,5 % ou 0,1 % pour un ordre de grandeur réaliste.';
+    t+='<br>⚠ <b>Projection, pas une promesse.</b> Elle rejoue les gains/pertes <i>quotidiens</i> de chaque backtest : le drawdown réel, mesuré trade par trade, serait plus creusé que les '
+      +pct(sim.mdd,1)+' affichés. Les backtests couvrent '+(sim.mois||'?')+' mois et supposent que chaque set se comporte à l\'avenir comme dans le passé — ce que rien ne garantit.';
+    note.innerHTML=t;
+  }
 }
 
 function renderBtCompare(a){
