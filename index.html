@@ -321,8 +321,15 @@
 
     <div class="dz" id="btDrop"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:26px;height:26px"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg><div style="margin-top:8px">Glisse ici les rapports HTML de tes backtests<br>ou <label style="color:var(--accent);cursor:pointer;text-decoration:underline">parcours tes fichiers<input type="file" id="btFile" accept=".htm,.html" multiple style="display:none"></label></div></div>
 
-    <div id="btToolbar" style="display:none;justify-content:space-between;align-items:center;gap:8px;margin-top:12px">
+    <div id="btToolbar" style="display:none;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap">
       <span id="btCount" style="font-size:13px;color:var(--muted)"></span>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin:0;margin-left:auto">Afficher les stats à
+        <select id="btStatRisk" style="width:auto">
+          <option value="1">1 % — risque des backtests</option>
+          <option value="0.5">0,5 % — ÷2</option>
+          <option value="0.1">0,1 % — ÷10</option>
+        </select>
+      </label>
       <button class="ghost sm" id="btClearAll" style="border-color:var(--red);color:var(--red)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>Tout effacer</button>
     </div>
 
@@ -400,7 +407,7 @@ let fileHandle=null, pollTimer=null, lastData=null, chart=null, lastA=null, cvMa
 const LS='dzcockpit.v1';
 function loadStore(){ try{return JSON.parse(localStorage.getItem(LS))||{}}catch(e){return{}} }
 function saveStore(s){ localStorage.setItem(LS,JSON.stringify(s)); }
-let store = Object.assign({setNames:{}, equitySnaps:[], settings:{balance:100000,riskPct:0.5,ddWarn:6,ddMax:10}}, loadStore());
+let store = Object.assign({setNames:{}, equitySnaps:[], settings:{balance:100000,riskPct:0.5,ddWarn:6,ddMax:10,btStatRisk:1}}, loadStore());
 store.setNames=store.setNames||{}; store.equitySnaps=store.equitySnaps||[]; store.settings=store.settings||{balance:100000,riskPct:0.5,ddWarn:6,ddMax:10};
 // Correspondance magic number -> nom du backtest (tes renommages manuels restent prioritaires).
 const DEFAULT_SET_NAMES = {
@@ -447,10 +454,22 @@ const riskTxt = () => {
   return pct(r, c%100===0 ? 0 : (c%10===0 ? 1 : 2));
 };
 /* "÷2" pour 0,5 %, "÷10" pour 0,1 %, "÷3,3" pour 0,3 %... */
-function btDivTxt(){
-  const d = BT_RISK / riskCible();
+const divTxt = r => {
+  const d = BT_RISK / r;
   return '÷' + ((Math.abs(d-Math.round(d))<0.01) ? String(Math.round(d)) : fmt(d,1));
-}
+};
+function btDivTxt(){ return divTxt(riskCible()); }
+
+/* ---------- risque d'AFFICHAGE des stats de backtest ----------
+   Volontairement indépendant du risque live (Garde-fou) : les backtests sont
+   lancés à 1 % et on veut pouvoir les lire à 1 %, 0,5 % ou 0,1 % à la demande,
+   sans toucher aux réglages du live. Par défaut : 1 %, le risque réel du backtest. */
+const btStatRisk = () => Number(store.settings.btStatRisk) || 1;
+const btStatScale = () => btStatRisk() / BT_RISK;
+const btStatTxt = () => { const r=btStatRisk(), c=Math.round(r*100); return pct(r, c%100===0?0:(c%10===0?1:2)); };
+const btStatDivTxt = () => divTxt(btStatRisk());
+/* true quand on n'affiche PAS le risque brut : la ligne de comparaison a alors un sens. */
+const btStatEchelle = () => Math.abs(btStatRisk()-BT_RISK) > 1e-9;
 /* Libellés figés dans le HTML : on les réaligne sur le risque courant.
    Appelé aussi au démarrage, car render() sort tôt s'il n'y a pas de données. */
 function majLibellesRisque(){
@@ -1058,6 +1077,7 @@ function renderBacktests(a){
   }
   const wrap=document.getElementById('btListWrap'); if(wrap) wrap.style.display='block';
   if(tb){ tb.style.display='flex'; cnt.textContent=bts.length+' backtest'+(bts.length>1?'s':'')+' importé'+(bts.length>1?'s':''); }
+  const srSel=document.getElementById('btStatRisk'); if(srSel) srSel.value=String(btStatRisk());
   const liveDD={};
   if(a&&a.groups){ Object.keys(a.groups).forEach(k=>{ if(k.indexOf('magic:')===0) liveDD[k.slice(6)]={dd:setDD(a.groups[k]),n:a.groups[k].closed.length}; }); }
   list.innerHTML=bts.map(b=>{ const s=b.stats; const inc=b.included!==false; return `<div class="card" style="margin-bottom:10px;${inc?'':'opacity:.5'}">
@@ -1069,8 +1089,8 @@ function renderBacktests(a){
       </div>
       <button class="ghost sm" data-del="${b.id}">✕ retirer</button></div>
     <div class="grid g4" style="margin-top:10px">
-      <div class="stat" style="background:var(--panel2)"><div class="lab">Rendement (${riskTxt()})</div><div class="val ${s.rendementNet>=0?'pos':'neg'}" style="font-size:18px">${pct(s.rendementNet*btScale(),1)}</div><div class="help">backtest à 1 % : ${pct(s.rendementNet,1)}</div></div>
-      <div class="stat" style="background:var(--panel2)"><div class="lab">Drawdown max (${riskTxt()})</div><div class="val" style="font-size:18px">${pct(s.maxDDpct*btScale(),1)}</div><div class="help">backtest à 1 % : ${pct(s.maxDDpct,1)}</div></div>
+      <div class="stat" style="background:var(--panel2)"><div class="lab">Rendement (${btStatTxt()})</div><div class="val ${s.rendementNet>=0?'pos':'neg'}" style="font-size:18px">${pct(s.rendementNet*btStatScale(),1)}</div><div class="help">${btStatEchelle()?('backtest à 1 % : '+pct(s.rendementNet,1)+' ('+btStatDivTxt()+')'):'risque brut du backtest'}</div></div>
+      <div class="stat" style="background:var(--panel2)"><div class="lab">Drawdown max (${btStatTxt()})</div><div class="val" style="font-size:18px">${pct(s.maxDDpct*btStatScale(),1)}</div><div class="help">${btStatEchelle()?('backtest à 1 % : '+pct(s.maxDDpct,1)+' ('+btStatDivTxt()+')'):'risque brut du backtest'}</div></div>
       <div class="stat" style="background:var(--panel2)"><div class="lab">Profit factor</div><div class="val" style="font-size:18px">${s.pf==null?'—':fmt(s.pf,2)}</div><div class="help">identique quel que soit le risque</div></div>
       <div class="stat" style="background:var(--panel2)"><div class="lab">Trades</div><div class="val" style="font-size:18px">${s.nbTrades}</div><div class="help">identique quel que soit le risque</div></div>
     </div>
@@ -1239,8 +1259,10 @@ function renderBtCombo(){
   const moisPos = mKeys.length ? posM/mKeys.length*100 : 0;
   document.getElementById('btComboMeta').textContent=(dates.length?(dates[0]+' → '+dates[dates.length-1]):'')+(mKeys.length?(' · '+mKeys.length+' mois · '+bts.length+' sets'):'');
   const cards=[
-    {lab:'Rendement total ('+riskTxt()+')',val:pct(run*btScale(),1),cls:run>=0?'pos':'neg',sub:'backtest à 1 % : '+pct(run,1)},
-    {lab:'Drawdown max ('+riskTxt()+')',val:pct(mdd*btScale(),1),cls:'warn',sub:'backtest à 1 % : '+pct(mdd,1)},
+    {lab:'Rendement total ('+btStatTxt()+')',val:pct(run*btStatScale(),1),cls:run>=0?'pos':'neg',
+     sub:btStatEchelle()?('backtest à 1 % : '+pct(run,1)+' ('+btStatDivTxt()+')'):'risque brut du backtest'},
+    {lab:'Drawdown max ('+btStatTxt()+')',val:pct(mdd*btStatScale(),1),cls:'warn',
+     sub:btStatEchelle()?('backtest à 1 % : '+pct(mdd,1)+' ('+btStatDivTxt()+')'):'risque brut du backtest'},
     {lab:'Recovery factor',val:recovery===Infinity?'∞':fmt(recovery,1),sub:'identique quel que soit le risque'},
     {lab:'Profit factor',val:portPF===Infinity?'∞':fmt(portPF,2),cls:portPF>=1.3?'pos':portPF>=1?'warn':'neg',sub:'identique quel que soit le risque'},
     {lab:'Win rate',val:pct(winRate,1),cls:winRate>=50?'pos':'warn'},
@@ -1372,7 +1394,8 @@ document.getElementById('calcSym').addEventListener('change',e=>{const d={forex:
 
 /* ---------- settings save ---------- */
 document.getElementById('saveRisk').addEventListener('click',()=>{
-  store.settings={balance:Number(document.getElementById('setBalance').value)||100000,riskPct:Number(document.getElementById('setRiskPct').value)||0.5,ddWarn:Number(document.getElementById('setDdWarn').value)||6,ddMax:Number(document.getElementById('setDdMax').value)||10};
+  // Object.assign : ne PAS écraser les réglages absents de ce formulaire (btStatRisk).
+  store.settings=Object.assign({}, store.settings, {balance:Number(document.getElementById('setBalance').value)||100000,riskPct:Number(document.getElementById('setRiskPct').value)||0.5,ddWarn:Number(document.getElementById('setDdWarn').value)||6,ddMax:Number(document.getElementById('setDdMax').value)||10});
   // renderBacktests : les cartes affichent le risque cible, render() ne les redessine pas.
   saveStore(store); render(); majLibellesRisque(); renderBacktests(lastA); flash('Paramètres enregistrés');
 });
@@ -1514,6 +1537,11 @@ document.getElementById('tabs').addEventListener('click',e=>{
   if(nb) nb.addEventListener('change',()=>renderBtCompare(lastA));
   const pb=document.getElementById('btPeriod');
   if(pb) pb.addEventListener('change',()=>renderBtCompare(lastA));
+  const sr=document.getElementById('btStatRisk');
+  if(sr) sr.addEventListener('change',e=>{
+    store.settings.btStatRisk=Number(e.target.value)||1;
+    saveStore(store); renderBacktests(lastA);
+  });
   const clr=document.getElementById('btClearAll');
   if(clr) clr.addEventListener('click',()=>{
     if(!store.backtests.length) return;
