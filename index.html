@@ -1773,14 +1773,32 @@ function initSections(){
    Les deux encadrent la réalité : additif = si tes EA tradent en lots fixes,
    composé = s'ils risquent un % du solde. Vérifié : ce modèle reproduit les
    chiffres de QuantAnalyzer au net et au drawdown à 0,3 % près. */
+/* Reconstruit les trades round-trip à partir des seuls DEALS stockés — pour les
+   backtests importés AVANT l'ajout du champ `rt` (localStorage / backtests.json
+   anciens). À chaque sortie, on rattache la commission d'entrée de la 1re position
+   encore ouverte (FIFO par nombre). Vérifié sur les 20 sets : redonne exactement
+   le classement gagnant/perdant de QuantAnalyzer (3544/2210, PF 1,68, DD 23 049).
+   deals = [sec, pnl, isClose]. */
+function rtDepuisDeals(deals){
+  const d=(deals||[]).filter(x=>x&&x.length).slice().sort((a,b)=>a[0]-b[0]);
+  const q=[], rt=[];
+  d.forEach(x=>{ const close = x.length>2 ? x[2] : 1;
+    if(!close) q.push(x[1]);                       // entrée : sa commission
+    else { const comm=q.length?q.shift():0; rt.push([x[0], Math.round((x[1]+comm)*100)/100]); }
+  });
+  return rt.length ? rt : null;
+}
 function btAdditif(bts){
-  // Round-trip (rt) si TOUS les sets l'ont (import récent) : reproduit
-  // QuantAnalyzer à la virgule. Sinon repli deals (~1 % d'écart, l'ancien modèle).
-  const exact = bts.length>0 && bts.every(b=>b.rt && b.rt.length);
+  // Round-trip par set : le champ `rt` s'il existe (import récent, apparié au
+  // volume), sinon reconstruit depuis les deals (compat. anciens imports). Dans les
+  // deux cas on obtient le classement round-trip de QuantAnalyzer, pas le « deal ».
+  const rtOf = b => (b.rt && b.rt.length) ? b.rt : rtDepuisDeals(b.deals);
+  const rts = bts.map(rtOf);
+  const exact = bts.length>0 && rts.every(x => x && x.length);
   const evs=[];
   if(exact){
-    // un événement = un trade complet (deal de clôture, commission d'entrée incluse)
-    bts.forEach(b=>b.rt.forEach(d=>evs.push({t:d[0], pnl:d[1], out:1})));
+    // un événement = un trade complet (clôture, commission d'entrée incluse)
+    rts.forEach(rt=>rt.forEach(d=>evs.push({t:d[0], pnl:d[1], out:1})));
   } else {
     bts.forEach(b=>(b.deals||[]).forEach(d=>evs.push({t:d[0], pnl:d[1], out:d.length>2?d[2]:1})));
   }
@@ -2215,9 +2233,20 @@ function renderBtCombo(){
       +(conf.extra.length?'<div class="help" style="margin-bottom:4px">'+conf.extra.length+' backtest(s) hors portefeuille de référence : '+conf.extra.map(b=>b.name).join(', ')+'.</div>':'')+legende;
   }
 
-  // ---- calcul réel sur les trades des backtests importés (modèle additif lots
-  //      fixes = celui de QuantAnalyzer). C'est la SOURCE des stats dérivables. ----
-  const add = btAdditif(bts);
+  // ---- calcul réel sur les trades importés, à l'échelle du sélecteur « Afficher
+  //      les stats à » (btStatScale : 1=1 %, 0.5=0,5 %, 0.1=0,1 %). Le modèle est
+  //      additif (lots fixes) : diviser le risque par 2 divise chaque P&L par 2,
+  //      donc les MONTANTS suivent l'échelle et les RATIOS restent identiques. ----
+  const scale = btStatScale();
+  const echelle = btStatEchelle();
+  const addRaw = btAdditif(bts);
+  const add = addRaw ? {
+    net: addRaw.net*scale, mddAbs: addRaw.mddAbs*scale,
+    trades: addRaw.trades.map(p=>p*scale),
+    evs: addRaw.evs.map(e=>({t:e.t, pnl:e.pnl*scale, out:e.out})),
+    parMois: (()=>{ const o={}; Object.keys(addRaw.parMois).forEach(k=>o[k]=addRaw.parMois[k]*scale); return o; })(),
+    exact: addRaw.exact
+  } : null;
   const s = add ? btStatsQA(add.trades) : null;
   // Périodes couvertes (pour les moyennes) et Return/DD, calculés depuis l'import.
   let nMonths=0, spanYears=0, calDays=0;
@@ -2229,8 +2258,9 @@ function renderBtCombo(){
       calDays=Math.max(1, Math.round(span/(24*3600)));  // jours calendaires, comme QuantAnalyzer
     }
   }
-  const net = add ? add.net : QA.totalProfit;
+  const net = add ? add.net : QA.totalProfit*scale;
   const retDD = (add && add.mddAbs>0) ? net/add.mddAbs : null;
+  const ddPct = add ? add.mddAbs/qaBaseCapital()*100 : QA.drawdownPct;
 
   // Rendu d'une tuile avec marqueur de source : 'calc' (calculé sur tes imports)
   // ou 'qa' (valeur du rapport, non calculable depuis les seuls trades).
@@ -2243,15 +2273,15 @@ function renderBtCombo(){
   const head = s ? [
     {src:'calc', lab:'Profit total', val:money(net), cls:'pos', sub:s.n.toLocaleString('fr-FR')+' trades'},
     {src:'calc', lab:'Return / DD', val:retDD==null?'—':fmt(retDD,2), cls:'pos', sub:'profit ÷ drawdown $'},
-    {src:'calc', lab:'Drawdown max', val:money0(add.mddAbs), cls:'warn', sub:'soit '+pct(QA.drawdownPct,2)+' d\'un compte de '+money0(qaBaseCapital())},
+    {src:'calc', lab:'Drawdown max', val:money0(add.mddAbs), cls:'warn', sub:'soit '+pct(ddPct,2)+' d\'un compte de '+money0(qaBaseCapital())},
     {src:'calc', lab:'Profit factor', val:s.pf===Infinity?'∞':fmt(s.pf,2), cls:'pos', sub:'gains ÷ pertes'},
     {src:'calc', lab:'Winning %', val:pct(s.winRate,2), cls:'pos', sub:s.wins.toLocaleString('fr-FR')+' gagnants / '+s.losses.toLocaleString('fr-FR')+' perdants'},
     {src:'calc', lab:'Trade moyen', val:money(s.expectancy), cls:s.expectancy>=0?'pos':'neg', sub:'espérance par trade'},
     {src:'calc', lab:'SQN', val:s.sqnQA==null?'—':fmt(s.sqnQA,2), sub:'System Quality Number'},
     {src:'qa', lab:'Espérance en R', val:fmt(QA.rExpectancy,2)+' R', cls:'pos', sub:'R Exp Score '+fmt(QA.rExpScore,2)},
-    {src:'qa', lab:'CAGR', val:pct(QA.cagr,2), cls:'pos', sub:'croissance annualisée'},
+    {src:'qa', lab:'CAGR', val:pct(QA.cagr*scale,2), cls:'pos', sub:echelle?'extrapolé à '+btStatTxt():'croissance annualisée'},
     {src:'qa', lab:'Sharpe ratio', val:fmt(QA.sharpe,2), sub:'méthode QuantAnalyzer'},
-    {src:'qa', lab:'Rendement annuel moyen', val:pct(QA.yearlyAvgRet,2), cls:'pos', sub:'base capital QuantAnalyzer'},
+    {src:'qa', lab:'Rendement annuel moyen', val:pct(QA.yearlyAvgRet*scale,2), cls:'pos', sub:echelle?'extrapolé à '+btStatTxt():'base capital QuantAnalyzer'},
     {src:'qa', lab:'Profit en pips', val:fmt(QA.profitPips,1)+' pips', cls:'pos', sub:'nécessite les prix'}
   ] : [];
   document.getElementById('btComboStats').innerHTML=head.map(tileHTML).join('');
@@ -2272,9 +2302,9 @@ function renderBtCombo(){
     {src:'calc', lab:'Profit quotidien moyen', val:calDays?money(net/calDays):'—', cls:'pos', sub:calDays.toLocaleString('fr-FR')+' jours (calendaires)'},
     {src:'calc', lab:'Profit mensuel moyen', val:nMonths?money(net/nMonths):'—', cls:'pos', sub:nMonths+' mois'},
     {src:'calc', lab:'Profit annuel moyen', val:spanYears>0?money(net/spanYears):'—', cls:'pos', sub:fmt(spanYears,1)+' ans couverts'},
-    {src:'qa', lab:'Déviation', val:pct(QA.deviation,2), sub:'écart-type des rendements'},
+    {src:'qa', lab:'Déviation', val:pct(QA.deviation*scale,2), sub:echelle?'extrapolé à '+btStatTxt():'écart-type des rendements'},
     {src:'qa', lab:'Z-Score', val:fmt(QA.zScore,2), sub:'Z-probabilité '+fmt(QA.zProbability,0)+' %'},
-    {src:'qa', lab:'AHPR', val:fmt(QA.ahpr,2), sub:'rendement moyen / trade'},
+    {src:'qa', lab:'AHPR', val:fmt(QA.ahpr*scale,2), sub:echelle?'extrapolé à '+btStatTxt():'rendement moyen / trade'},
     {src:'qa', lab:'Annuel % / MaxDD %', val:fmt(QA.annualMaxDD,2), sub:'ratio de robustesse'}
   ] : [];
   document.getElementById('btComboStats2').innerHTML=det.map(tileHTML).join('');
@@ -2289,21 +2319,26 @@ function renderBtCombo(){
     makeLineChart(cvCombo, simCurve.dates,
       [{data:simCurve.serie,borderColor:'#2ea043',backgroundColor:'rgba(46,160,67,.10)',fill:true,tension:.2,pointRadius:0,borderWidth:2}],
       ' $', v=>money0(v));
-    document.getElementById('btComboMeta').textContent=simCurve.dates[0]+' → '+simCurve.dates[simCurve.dates.length-1]+' · '+conf.matched.length+'/'+conf.nTotal+' sets · lots fixes 1 %';
+    document.getElementById('btComboMeta').textContent=simCurve.dates[0]+' → '+simCurve.dates[simCurve.dates.length-1]+' · '+conf.matched.length+'/'+conf.nTotal+' sets · lots fixes '+btStatTxt();
   } else if(cvCombo._chart){ cvCombo._chart.destroy(); cvCombo._chart=null; }
 
   const note=document.getElementById('btComboNote');
   if(note){
-    note.innerHTML='Les stats <b>calculées</b> fusionnent les trades de tes '+conf.matched.length+' set(s) importé(s) sur un compte unique, <b>lots d\'origine (1 % par trade), sans intérêts composés</b> — la convention de QuantAnalyzer. Profit, drawdown $, gagnants/perdants, profit factor, séries… sont donc de vrais calculs sur tes données'
-      +(allIn?', qui retombent sur le rapport à moins de 0,02 % près.':' (limités aux sets présents pour l\'instant).')
-      +' Les tuiles <b>réf. QA</b> (Sharpe, CAGR, rendement %, pips…) restent celles du rapport car elles exigent les prix ou une base de capital absente des relevés de trades.'
-      +'<br>⚠ <b>Projection, pas une promesse.</b> Les backtests supposent que chaque set se comporte à l\'avenir comme dans le passé — ce que rien ne garantit. Les analyses ci-dessous (ratios, Monte Carlo, drawdowns) rejouent ce même portefeuille.';
+    note.innerHTML='Stats affichées à <b>'+btStatTxt()+' de risque par trade</b>'
+      +(echelle?' — le sélecteur « Afficher les stats à » met à l\'échelle les <b>montants</b> depuis le 1 % du rapport ('+btStatDivTxt()+') ; les <b>ratios</b> (profit factor, win %, SQN, Return/DD) ne dépendent pas du risque et ne bougent pas.':' (le risque des backtests et du rapport QuantAnalyzer).')
+      +'<br>Les stats <b>calculées</b> fusionnent les trades de tes '+conf.matched.length+' set(s) importé(s) sur un compte unique, <b>lots fixes, sans intérêts composés</b> — la convention de QuantAnalyzer. Profit, drawdown $, gagnants/perdants, profit factor, séries… sont de vrais calculs sur tes données'
+      +(allIn?'.':' (limités aux sets présents pour l\'instant).')
+      +' Le comptage est fait <b>par trade complet (round-trip)</b>, comme QuantAnalyzer : gagnants/perdants, profit factor, win %, drawdown $, SQN, Return/DD sont <b>identiques au rapport</b>'
+      +(addRaw&&!addRaw.exact?' <span style="color:var(--amber)">(⚠ certains sets manquent du détail des trades — réimporte-les pour un comptage exact)</span>.':'.')
+      +' Le <b>net</b> reste à ~0,02 % du rapport, écart concentré sur les 4 sets <b>TNT</b> à clôtures partielles (MT5 attribue leur P&L aux positions, l\'app somme les exécutions).'
+      +' Les tuiles <b>réf. QA</b> (Sharpe, rendement %, pips…) viennent du rapport ; à un autre risque, leurs montants sont extrapolés linéairement.'
+      +'<br>⚠ <b>Projection, pas une promesse.</b> Les backtests supposent que chaque set se comporte à l\'avenir comme dans le passé — ce que rien ne garantit. Les analyses ci-dessous (ratios, Monte Carlo, drawdowns) rejouent ce même portefeuille au risque choisi.';
   }
 
-  // ---- analyses de robustesse : sur le même portefeuille, à 1 % ----
+  // ---- analyses de robustesse : sur le même portefeuille, au risque choisi ----
   const deps=[...new Set(bts.map(b=>Math.round(Number(b.deposit)||0)).filter(d=>d>0))];
   const capital = deps.length===1 ? deps[0] : 100000;
-  const sim = btSimuleCompteUnique(bts, capital, 1);
+  const sim = btSimuleCompteUnique(bts, capital, btStatScale());
   btSimCourante=sim;
   renderBtRatios(sim); renderBtMC(sim); renderBtDD(sim);
 }
