@@ -146,6 +146,7 @@
     <div class="tab" data-v="analyse"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Analyse</div>
     <div class="tab" data-v="backtests"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M19 9l-5 5-4-4-4 4"/></svg>Backtests</div>
     <div class="tab" data-v="journal"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>Journal & courbe</div>
+    <div class="tab" data-v="controle"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Contrôle live</div>
   </div>
 
   <!-- COCKPIT -->
@@ -465,6 +466,47 @@
     </div>
   </div>
 
+  <!-- CONTRÔLE LIVE -->
+  <div class="view" id="v-controle">
+    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Ces quatre contrôles répondent à une seule question : <b>ton live tient-il la promesse du backtest ?</b> Ils s'appuient sur l'appariement <b>magic number → backtest</b> que tu renseignes dans l'onglet « Backtests ». Tant que l'échantillon est trop petit, l'app annonce le nombre de trades manquants au lieu d'un verdict — pour ne pas couper un EA sur du bruit.</div></div>
+
+    <details class="card" data-sect="ctrlDiv" style="margin-top:14px" open>
+      <summary><h3>Divergence live vs backtest <span class="tag a" id="ctrlDivTag">—</span></h3></summary>
+      <div class="sect-body">
+        <div class="help" style="margin-bottom:10px">Pour chaque set : ce que fait ton live contre ce que promet son backtest, ramené à ton risque. Le verdict s'appuie sur un test statistique (z sur le taux de réussite, t sur l'espérance) — pas sur un simple écart brut.</div>
+        <div id="ctrlDiv"><div class="empty">En attente de trades live et de backtests importés.</div></div>
+      </div>
+    </details>
+
+    <details class="card" data-sect="ctrlMuet" style="margin-top:14px" open>
+      <summary><h3>EA silencieux <span class="tag a" id="ctrlMuetTag">—</span></h3></summary>
+      <div class="sect-body">
+        <div class="help" style="margin-bottom:10px">Chaque set a une cadence connue par son backtest. Si le silence dure trop longtemps, l'EA est probablement planté, mal configuré ou MT5 déconnecté. La probabilité affichée est celle d'observer un tel silence si le set tradait normalement.</div>
+        <div id="ctrlMuet"><div class="empty">En attente de trades live et de backtests importés.</div></div>
+      </div>
+    </details>
+
+    <details class="card" data-sect="ctrlCout" style="margin-top:14px" open>
+      <summary><h3>Coût d'exécution réel <span class="tag a" id="ctrlCoutTag">—</span></h3></summary>
+      <div class="sect-body">
+        <div class="help" style="margin-bottom:10px">Un backtest ne connaît ni ton vrai spread, ni le slippage, ni la latence du VPS. On compare ici ton trade moyen réel à celui attendu, et on isole la part explicitement facturée (commissions + swaps).</div>
+        <div class="grid g4" id="ctrlCoutStats"></div>
+        <div id="ctrlCoutTable" style="margin-top:14px"></div>
+        <div class="help" style="margin-top:10px" id="ctrlCoutNote"></div>
+      </div>
+    </details>
+
+    <details class="card" data-sect="ctrlProj" style="margin-top:14px" open>
+      <summary><h3>Projection du compte <span class="tag a" id="ctrlProjTag">—</span></h3></summary>
+      <div class="sect-body">
+        <div class="help" style="margin-bottom:10px">Depuis ton solde actuel, on rejoue des milliers de fois les trades du portefeuille backtesté (à ton risque) pour encadrer les mois à venir. C'est une <b>distribution de possibles</b>, pas une prévision.</div>
+        <div class="grid g4" id="ctrlProjStats"></div>
+        <div id="ctrlProjTable" style="margin-top:14px"></div>
+        <div class="help" style="margin-top:10px" id="ctrlProjNote"></div>
+      </div>
+    </details>
+  </div>
+
   <div class="foot">
     Cockpit Darwinex Zero · application locale, tes données ne quittent jamais ton ordinateur.<br>
     Lance « Lancer-Cockpit.bat » : lecture auto du fichier MT5 toutes les 5 min, sur tous les navigateurs. Estimations indicatives, pas un conseil en investissement.
@@ -600,7 +642,15 @@ function normTrade(t){
     raw:t
   };
 }
-function parseT(v){ if(!v) return null; if(typeof v==='number'){ return new Date(v < 1e12 ? v*1000 : v);} const s=String(v).replace(/\./g,'-').replace(' ','T'); const d=new Date(s); return isNaN(d)?null:d; }
+/* "2020.01.16 18:00:09" (MT5) et l'ISO standard, millisecondes comprises.
+   Le remplacement des points est ANCRÉ sur la date : un replace global cassait
+   "…:56.789Z" en "…:56-789Z", donc toute date ISO avec millisecondes. */
+function parseT(v){
+  if(!v) return null;
+  if(typeof v==='number') return new Date(v < 1e12 ? v*1000 : v);
+  const s=String(v).trim().replace(/^(\d{4})\.(\d{1,2})\.(\d{1,2})/, '$1-$2-$3').replace(' ','T');
+  const d=new Date(s); return isNaN(d)?null:d;
+}
 
 /* group key for a set */
 // Trades arrivés sans magic (0) mais identifiables par symbole -> rattachés au bon set.
@@ -677,7 +727,7 @@ function render(){
   document.getElementById('setBalance').value=Math.round(a.balance);
   renderTop(a); renderDD(a); renderScore(a); renderCalibration(a); renderAdvice(a);
   renderSets(a); renderRiskTab(a); renderJournal(a); renderDarwinTab(a); renderAnalyse(a);
-  renderHeat(a); renderMonthHeat(a);
+  renderHeat(a); renderMonthHeat(a); renderControle(a);
   lastA=a; renderBtCompare(a); renderStale();
 }
 
@@ -1488,7 +1538,7 @@ function renderBacktests(a){
     ['btComboChart','btMCChart'].forEach(id=>{const c=document.getElementById(id); if(c&&c._chart){c._chart.destroy();c._chart=null;}});
     ['btRatiosCard','btMCCard','btDDCard'].forEach(id=>{const e=document.getElementById(id); if(e)e.style.display='none';});
     btSimCourante=null;
-    renderBtCorr(); renderBtCompare(a); return;
+    renderBtCorr(); renderBtCompare(a); if(a) renderControle(a); return;
   }
   const wrap=document.getElementById('btListWrap'); if(wrap) wrap.style.display='block';
   if(tb){ tb.style.display='flex'; cnt.textContent=bts.length+' backtest'+(bts.length>1?'s':'')+' importé'+(bts.length>1?'s':''); }
@@ -1535,7 +1585,7 @@ function renderBacktests(a){
   list.querySelectorAll('[data-inc]').forEach(cb=>cb.addEventListener('change',e=>{const b=store.backtests.find(x=>x.id===e.target.dataset.inc);if(b){b.included=e.target.checked;saveStore(store);renderBacktests(lastA);}}));
   list.querySelectorAll('[data-del]').forEach(btn=>btn.addEventListener('click',e=>{store.backtests=store.backtests.filter(x=>x.id!==e.target.dataset.del);saveStore(store);renderBacktests(lastA);}));
   list.querySelectorAll('.bt-magic').forEach(inp=>inp.addEventListener('change',e=>{const b=store.backtests.find(x=>x.id===e.target.dataset.id);if(b){const v=e.target.value.trim();b.magic=v===''?null:v;saveStore(store);renderBacktests(lastA);}}));
-  renderBtCombo(); renderBtCorr(); renderBtCompare(a);
+  renderBtCombo(); renderBtCorr(); renderBtCompare(a); if(a) renderControle(a);
 }
 
 const BT_COLORS=['#7c6df2','#388bfd','#2ea043','#d29922','#f85149','#1d9e75','#d4537e','#85b7eb','#ef9f27','#c0dd97','#e24b4a','#5dcaa5'];
@@ -2384,6 +2434,318 @@ function renderBtCompare(a){
   const lr=live.total||0, br=bt.total||0;
   if(period==='sincelive'){ const diff=lr-br; note.textContent=`Depuis ${startISO} : live ${pct(lr,2)} vs backtest${norm==='scaled'?' ('+btDivTxt()+')':''} ${pct(br,2)}. `+(Math.abs(diff)<0.05?'Le live suit la référence. 👍':(diff>0?'Le live surperforme la référence.':'Le live sous-performe la référence — à surveiller.')); }
   else { note.textContent=`Portefeuille backtesté complet (${labels[0]} → ${labels[labels.length-1]}) : ${pct(br,1)}${norm==='scaled'?' ('+btDivTxt()+')':''}. Ton live (${pct(lr,2)} depuis ${startISO}) apparaît à droite — c'est normal qu'il soit court au début, il s'étoffera avec le temps.`; }
+}
+
+/* ================= ONGLET CONTRÔLE LIVE =================
+   Quatre contrôles qui répondent à « mon live tient-il la promesse du backtest ? ».
+   Tous s'appuient sur l'appariement magic -> backtest saisi dans l'onglet Backtests. */
+
+/* Magic associé à un backtest (saisie manuelle prioritaire, sinon déduction du nom). */
+function btMagic(b){
+  const m=(b.magic!=null&&b.magic!=='')?String(b.magic):(autoMagic(b.name)||'');
+  return m?String(m):'';
+}
+/* Référence d'un set, telle que mesurée dans SON backtest (à 1 %). */
+function btRefSet(b){
+  const s=b.stats||{}, dep=Number(b.deposit)||100000, n=s.nbTrades||0;
+  const d=b.days||[];
+  const spanJours = d.length>1 ? btNbJours(d[0][0], d[d.length-1][0]) : 0;
+  return { n, winRate:s.winRate||0, maxDDpct:s.maxDDpct||0, spanJours,
+    avgTradePct: (n && dep>0) ? (s.net/n)/dep*100 : null,      // % du capital par trade
+    joursParTrade: (n && spanJours>0) ? spanJours/n : null };
+}
+
+/* ---------- 1. divergence live vs backtest ----------
+   Deux tests : z sur le taux de réussite (proportion), t sur l'espérance par trade.
+   Le verdict retient le plus sévère. En dessous de 20 trades on ne tranche pas :
+   un écart de win rate sur 8 trades ne veut rien dire. */
+function divergenceSet(b, g, a){
+  const ref=btRefSet(b), ech=btScale();
+  const attWin=ref.winRate;
+  const attAvgPct=(ref.avgTradePct==null)?null:ref.avgTradePct*ech;
+  const cl=((g&&g.closed)||[]).filter(t=>t.closeTime);
+  const n=cl.length;
+  if(!n) return {n:0, attWin, attAvgPct, attDD:ref.maxDDpct*ech, statut:'vide'};
+  const dep=a.dep||100000;
+  const obsWin=cl.filter(t=>t.profit>0).length/n*100;
+  const rs=cl.map(t=>t.profit/dep*100);
+  const moy=rs.reduce((s,v)=>s+v,0)/n;
+  const sd=n>1?Math.sqrt(rs.reduce((s,v)=>s+(v-moy)*(v-moy),0)/(n-1)):0;
+  const p0=attWin/100;
+  const seP=(p0>0&&p0<1)?Math.sqrt(p0*(1-p0)/n):0;
+  const z=seP>0?(obsWin/100-p0)/seP:0;
+  const seM=sd>0?sd/Math.sqrt(n):0;
+  const t=(seM>0&&attAvgPct!=null)?(moy-attAvgPct)/seM:0;
+  // trades qu'il faudrait pour que l'écart de win rate observé devienne concluant
+  const d=Math.abs(obsWin/100-p0);
+  const nNec=(d>0.005&&p0>0&&p0<1)?Math.ceil(3.8416*p0*(1-p0)/(d*d)):null;
+  const pire=Math.max(Math.abs(z),Math.abs(t));
+  let statut;
+  if(n<20) statut='jeune';
+  else if(pire<1.5) statut='conforme';
+  else if(pire<2.5) statut='surveiller';
+  else statut='diverge';
+  // Ce qui déclenche le verdict : l'espérance ou le taux de réussite. Sert à
+  // n'afficher « X trades pour trancher » que quand c'est bien la réussite qui parle.
+  const cause = Math.abs(t)>=Math.abs(z) ? 'espérance' : 'réussite';
+  return {n, attWin, attAvgPct, attDD:ref.maxDDpct*ech, obsWin, obsAvgPct:moy,
+          z, t, nNec, statut, cause, sous:(attAvgPct!=null && moy<attAvgPct), dd:setDD(g)};
+}
+
+/* ---------- 2. EA silencieux ----------
+   Si les trades arrivent à cadence ~constante (Poisson), la probabilité de n'avoir
+   rien vu pendant t jours vaut exp(-t / joursParTrade). Sous 5 % c'est suspect,
+   sous 1 % c'est presque sûrement une panne. */
+function silenceSet(b, g){
+  const ref=btRefSet(b);
+  const cl=((g&&g.closed)||[]).filter(t=>t.closeTime);
+  if(!cl.length) return {n:0, gap:ref.joursParTrade, statut:'aucun'};
+  let dernier=cl[0].closeTime;
+  cl.forEach(t=>{ if(t.closeTime>dernier) dernier=t.closeTime; });
+  const jours=(Date.now()-dernier.getTime())/86400000;
+  const gap=ref.joursParTrade;
+  const proba=(gap>0)?Math.exp(-jours/gap)*100:null;
+  let statut='ok';
+  if(proba!=null && proba<1) statut='alarme';
+  else if(proba!=null && proba<5) statut='suspect';
+  return {n:cl.length, jours, gap, proba, dernier, statut};
+}
+
+/* ---------- 3. coût d'exécution réel ----------
+   Le backtest a ses coûts déjà fondus dans le P&L de chaque trade : impossible de
+   les isoler depuis les données stockées. On mesure donc les coûts EXPLICITES du
+   live (commission aller-retour + swap) et l'écart global d'espérance ; le reste
+   de l'écart = slippage, exécution, ou performance réellement différente. */
+function coutsLive(a){
+  const cl=a.closed.filter(t=>t.closeTime);
+  if(!cl.length) return null;
+  let lots=0, comm=0, swap=0, gross=0;
+  cl.forEach(t=>{ lots+=t.lots||0; comm+=(t.commission||0)*2; swap+=t.swap||0; gross+=(t.gross||0); });
+  const n=cl.length, cout=comm+swap;
+  return {n, lots, comm, swap, cout, gross,
+    coutParTrade:cout/n, coutParLot:lots>0?cout/lots:null,
+    partDuBrut:gross!==0?Math.abs(cout)/Math.abs(gross)*100:null};
+}
+/* Trade moyen attendu du portefeuille backtesté, ramené au risque live. */
+function btAttenduParTrade(a){
+  const bts=store.backtests.filter(b=>b.included!==false);
+  let sumPct=0, n=0;
+  bts.forEach(b=>{ const dep=Number(b.deposit)||100000, s=b.stats||{};
+    if(s.net!=null && dep>0){ sumPct+=s.net/dep*100; n+=s.nbTrades||0; } });
+  if(!n) return null;
+  const pct=sumPct/n*btScale();
+  return {pct, usd:pct/100*(a.dep||100000), n};
+}
+
+/* ---------- 4. projection Monte Carlo du compte réel ----------
+   On tire au hasard, AVEC remise, dans les rendements par trade du portefeuille
+   backtesté (ramenés au risque live), sur le nombre de trades attendu à l'horizon.
+   Limite assumée : suppose les trades indépendants et le futur semblable au passé. */
+function projectionLive(a, mois, nSim){
+  const bts=store.backtests.filter(b=>b.included!==false);
+  if(!bts.length) return null;
+  const ech=btScale(); const R=[]; let totTrades=0, spanJours=0;
+  bts.forEach(b=>{
+    const dep=Number(b.deposit)||100000;
+    const src=(b.rt&&b.rt.length)?b.rt:(b.deals||[]).filter(d=>d.length<3||d[2]);
+    src.forEach(d=>R.push((d[1]/dep)*ech));
+    totTrades+=src.length;
+    const dd=b.days||[];
+    if(dd.length>1) spanJours=Math.max(spanJours, btNbJours(dd[0][0], dd[dd.length-1][0]));
+  });
+  if(R.length<50 || spanJours<=0) return null;
+  const n=Math.max(1, Math.round(totTrades/spanJours*mois*30.44));
+  const eq0=a.equity||a.balance||100000;
+  const ddMax=Number(store.settings.ddMax)||10;
+  nSim=nSim||2000;
+  const fins=new Float64Array(nSim); let nBreach=0, nPos=0;
+  for(let k=0;k<nSim;k++){
+    let B=1, pic=1, touche=false;
+    for(let j=0;j<n;j++){
+      B*=(1+R[(Math.random()*R.length)|0]);
+      if(B<=0){ B=0; touche=true; break; }
+      if(B>pic) pic=B;
+      if((pic-B)/pic*100>=ddMax) touche=true;
+    }
+    fins[k]=B; if(touche)nBreach++; if(B>1)nPos++;
+  }
+  fins.sort();
+  const q=p=>fins[Math.min(nSim-1, Math.max(0, Math.floor(p*nSim)))];
+  return {mois, n, eq0, nSim, ddMax, med:q(0.5)*eq0, p05:q(0.05)*eq0, p95:q(0.95)*eq0,
+          probDD:nBreach/nSim*100, probPerte:(1-nPos/nSim)*100};
+}
+
+/* ---------- rendus ---------- */
+function renderControle(a){
+  renderCtrlDivergence(a); renderCtrlSilence(a); renderCtrlCouts(a); renderCtrlProjection(a);
+}
+
+function renderCtrlDivergence(a){
+  const el=document.getElementById('ctrlDiv'), tag=document.getElementById('ctrlDivTag');
+  if(!el) return;
+  const bts=store.backtests.filter(b=>b.included!==false);
+  const pose=(txt)=>{ el.innerHTML='<div class="empty">'+txt+'</div>'; tag.textContent='—'; tag.className='tag a'; };
+  if(!bts.length) return pose('Importe tes backtests dans l\'onglet « Backtests » pour activer ce suivi.');
+  const lignes=bts.map(b=>{ const mg=btMagic(b); return {b, mg, d:divergenceSet(b, mg?a.groups['magic:'+mg]:null, a)}; });
+  const suivis=lignes.filter(x=>x.mg);
+  if(!suivis.length) return pose('Aucun set n\'a de magic number renseigné. Ouvre l\'onglet « Backtests » et saisis le magic de chaque set pour activer la comparaison.');
+  const ordre={diverge:0, surveiller:1, jeune:2, conforme:3, vide:4};
+  suivis.sort((x,y)=>(ordre[x.d.statut]-ordre[y.d.statut]));
+  const badge=s=>({diverge:'<span class="tag r">🔴 diverge</span>', surveiller:'<span class="tag a">🟡 à surveiller</span>',
+    conforme:'<span class="tag g">🟢 conforme</span>', jeune:'<span class="tag a">trop tôt</span>',
+    vide:'<span style="color:var(--dim)">aucun trade</span>'}[s]||'—');
+  let h='<div style="overflow:auto"><table style="font-size:12.5px"><thead><tr>'
+    +'<th>Set</th><th>Trades</th><th>Réussite réelle / attendue</th><th>Trade moyen réel / attendu</th><th>Drawdown réel / réf.</th><th>Verdict</th>'
+    +'</tr></thead><tbody>';
+  suivis.forEach(({b,d})=>{
+    const nom=(b.name||'?'); const court=nom.length>26?nom.slice(0,25)+'…':nom;
+    const usd=v=>v==null?'—':money(v/100*(a.dep||100000));
+    h+='<tr><td title="'+nom.replace(/"/g,'&quot;')+'">'+court+'</td>'
+      +'<td>'+(d.n||0)+'</td>';
+    if(d.statut==='vide'){ h+='<td colspan="3" style="color:var(--dim)">en attente du premier trade live</td>'; }
+    else {
+      const okW=d.obsWin>=d.attWin;
+      h+='<td><b class="'+(okW?'pos':'neg')+'">'+pct(d.obsWin,1)+'</b> / '+pct(d.attWin,1)+'</td>'
+        +'<td><b class="'+(d.sous?'neg':'pos')+'">'+usd(d.obsAvgPct)+'</b> / '+usd(d.attAvgPct)+'</td>'
+        +'<td>'+pct(d.dd||0,2)+' / '+pct(d.attDD||0,2)+'</td>';
+    }
+    let sous='';
+    if(d.statut==='jeune') sous=d.n+'/20 trades';
+    else if(d.statut==='diverge') sous='sur l\''+d.cause;
+    else if(d.statut==='surveiller') sous='sur l\''+d.cause
+      +((d.cause==='réussite'&&d.nNec&&d.nNec>d.n)?' · ~'+d.nNec.toLocaleString('fr-FR')+' trades pour trancher':'');
+    h+='<td>'+badge(d.statut)+(sous?'<div class="help">'+sous+'</div>':'')+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  const sansMagic=lignes.length-suivis.length;
+  if(sansMagic) h+='<div class="help" style="margin-top:8px">'+sansMagic+' set(s) sans magic renseigné, donc non suivis. Complète-les dans l\'onglet « Backtests ».</div>';
+  h+='<div class="help" style="margin-top:4px">Le trade moyen attendu est celui du backtest ramené à ton risque ('+riskTxt()+'). Un verdict n\'est rendu qu\'à partir de 20 trades, et « diverge » signifie que l\'écart dépasse ce que le hasard explique (seuil ~2,5 écarts-types).</div>';
+  el.innerHTML=h;
+  const pires=suivis.map(x=>x.d.statut);
+  const st=pires.includes('diverge')?'diverge':pires.includes('surveiller')?'surveiller':pires.some(s=>s==='conforme')?'conforme':'jeune';
+  tag.textContent={diverge:'1 set diverge', surveiller:'à surveiller', conforme:'conforme', jeune:'trop tôt'}[st];
+  tag.className='tag '+({diverge:'r', surveiller:'a', conforme:'g', jeune:'a'}[st]);
+}
+
+function renderCtrlSilence(a){
+  const el=document.getElementById('ctrlMuet'), tag=document.getElementById('ctrlMuetTag');
+  if(!el) return;
+  const bts=store.backtests.filter(b=>b.included!==false);
+  const pose=(txt)=>{ el.innerHTML='<div class="empty">'+txt+'</div>'; tag.textContent='—'; tag.className='tag a'; };
+  if(!bts.length) return pose('Importe tes backtests pour connaître la cadence attendue de chaque set.');
+  const lignes=bts.map(b=>{ const mg=btMagic(b); return {b, mg, s:silenceSet(b, mg?a.groups['magic:'+mg]:null)}; }).filter(x=>x.mg);
+  if(!lignes.length) return pose('Aucun set n\'a de magic number renseigné. Saisis-les dans l\'onglet « Backtests ».');
+  const ordre={alarme:0, suspect:1, aucun:2, ok:3};
+  lignes.sort((x,y)=>ordre[x.s.statut]-ordre[y.s.statut]);
+  const badge=s=>({alarme:'<span class="tag r">🔴 probable panne</span>', suspect:'<span class="tag a">🟡 silence inhabituel</span>',
+    ok:'<span class="tag g">🟢 actif</span>', aucun:'<span style="color:var(--dim)">jamais tradé</span>'}[s]||'—');
+  let h='<div style="overflow:auto"><table style="font-size:12.5px"><thead><tr>'
+    +'<th>Set</th><th>Dernier trade</th><th>Silence</th><th>Cadence backtest</th><th>Probabilité de ce silence</th><th>État</th>'
+    +'</tr></thead><tbody>';
+  lignes.forEach(({b,s})=>{
+    const nom=(b.name||'?'); const court=nom.length>26?nom.slice(0,25)+'…':nom;
+    h+='<tr><td title="'+nom.replace(/"/g,'&quot;')+'">'+court+'</td>'
+      +'<td>'+(s.dernier?s.dernier.toLocaleDateString('fr-FR'):'—')+'</td>'
+      +'<td>'+(s.jours==null?'—':fmt(s.jours,1)+' j')+'</td>'
+      +'<td>'+(s.gap?('1 trade / '+fmt(s.gap,1)+' j'):'—')+'</td>'
+      +'<td>'+(s.proba==null?'—':'<b class="'+(s.proba<5?'neg':'')+'">'+pct(s.proba,1)+'</b>')+'</td>'
+      +'<td>'+badge(s.statut)+'</td></tr>';
+  });
+  h+='</tbody></table></div>'
+    +'<div class="help" style="margin-top:8px">La probabilité est celle d\'observer un silence aussi long <i>si le set tradait normalement</i>. Sous 5 % le silence est anormal, sous 1 % il s\'explique presque toujours par un EA arrêté, un magic mal réglé ou MT5 déconnecté.</div>';
+  el.innerHTML=h;
+  const sts=lignes.map(x=>x.s.statut);
+  const st=sts.includes('alarme')?'alarme':sts.includes('suspect')?'suspect':sts.includes('ok')?'ok':'aucun';
+  tag.textContent={alarme:'panne probable', suspect:'silence inhabituel', ok:'tous actifs', aucun:'aucun trade'}[st];
+  tag.className='tag '+({alarme:'r', suspect:'a', ok:'g', aucun:'a'}[st]);
+}
+
+function renderCtrlCouts(a){
+  const el=document.getElementById('ctrlCoutStats'), tab=document.getElementById('ctrlCoutTable'),
+        note=document.getElementById('ctrlCoutNote'), tag=document.getElementById('ctrlCoutTag');
+  if(!el) return;
+  const c=coutsLive(a);
+  if(!c){ el.innerHTML=''; tab.innerHTML='<div class="empty">Aucun trade clôturé pour l\'instant.</div>'; note.innerHTML=''; tag.textContent='—'; tag.className='tag a'; return; }
+  const att=btAttenduParTrade(a);
+  const reelParTrade=c.n?a.realized/c.n:0;
+  const ecart=att?reelParTrade-att.usd:null;
+  const ecartPct=(att&&att.usd!==0)?ecart/Math.abs(att.usd)*100:null;
+  el.innerHTML=[
+    {lab:'Trade moyen réel', val:money(reelParTrade), cls:reelParTrade>=0?'pos':'neg', sub:c.n+' trades clôturés'},
+    {lab:'Trade moyen attendu', val:att?money(att.usd):'—', sub:att?('backtest ramené à '+riskTxt()):'importe tes backtests'},
+    {lab:'Écart', val:ecart==null?'—':((ecart>=0?'+':'')+money(ecart)), cls:ecart==null?'':(ecart>=0?'pos':'neg'),
+     sub:ecartPct==null?'':((ecartPct>=0?'+':'')+fmt(ecartPct,1)+' % vs attendu')},
+    {lab:'Coûts explicites / trade', val:money(c.coutParTrade), cls:'neg',
+     sub:'commissions '+money(c.comm)+' · swaps '+money(c.swap)}
+  ].map(statHTML).join('');
+  // ventilation par symbole
+  const parSym={};
+  a.closed.filter(t=>t.closeTime).forEach(t=>{
+    const k=t.symbol||'?'; const g=parSym[k]||(parSym[k]={n:0,lots:0,cout:0,gross:0});
+    g.n++; g.lots+=t.lots||0; g.cout+=(t.commission||0)*2+(t.swap||0); g.gross+=(t.gross||0);
+  });
+  const rows=Object.entries(parSym).sort((x,y)=>x[1].cout-y[1].cout);
+  tab.innerHTML='<div style="overflow:auto"><table style="font-size:12.5px"><thead><tr>'
+    +'<th>Symbole</th><th>Trades</th><th>Lots</th><th>Coûts</th><th>Coût / lot</th><th>% du profit brut</th>'
+    +'</tr></thead><tbody>'
+    + rows.map(([k,g])=>'<tr><td>'+k+'</td><td>'+g.n+'</td><td>'+fmt(g.lots,2)+'</td>'
+        +'<td class="neg">'+money(g.cout)+'</td>'
+        +'<td>'+(g.lots>0?money(g.cout/g.lots):'—')+'</td>'
+        +'<td>'+(g.gross!==0?pct(Math.abs(g.cout)/Math.abs(g.gross)*100,1):'—')+'</td></tr>').join('')
+    +'</tbody></table></div>';
+  let t='Les coûts <b>explicites</b> ('+money(c.cout)+' au total, soit '+money(c.coutParTrade)+' par trade) sont ceux que ton broker facture : commissions aller-retour et swaps. ';
+  if(ecart!=null){
+    const partCouts=ecart<0?Math.min(Math.abs(c.coutParTrade)/Math.abs(ecart)*100,100):null;
+    t+= ecart>=0
+      ? 'Ton trade moyen réel est <b>au-dessus</b> de l\'attendu — rien à corriger côté coûts pour l\'instant.'
+      : 'Ton trade moyen réel est <b>en dessous</b> de l\'attendu de '+money(Math.abs(ecart))+'. Les coûts explicites en expliquent environ <b>'+fmt(partCouts,0)+' %</b> ; le reste vient du slippage, de l\'exécution, ou d\'une performance réellement différente du backtest.';
+    t+=' ⚠ Avec '+c.n+' trade(s), cet écart reste '+(c.n<30?'très peu fiable — attends une trentaine de trades avant d\'en tirer une conclusion.':'indicatif : il se stabilisera avec le temps.');
+  } else t+='Importe tes backtests pour comparer à l\'espérance attendue.';
+  note.innerHTML=t;
+  const sev=(ecartPct==null||c.n<30)?'a':(ecartPct>=-10?'g':ecartPct>=-25?'a':'r');
+  tag.textContent=(c.n<30)?'échantillon jeune':(ecartPct==null?'—':(ecartPct>=-10?'conforme':ecartPct>=-25?'érosion modérée':'érosion forte'));
+  tag.className='tag '+sev;
+}
+
+function renderCtrlProjection(a){
+  const el=document.getElementById('ctrlProjStats'), tab=document.getElementById('ctrlProjTable'),
+        note=document.getElementById('ctrlProjNote'), tag=document.getElementById('ctrlProjTag');
+  if(!el) return;
+  const p12=projectionLive(a, 12, 2000);
+  if(!p12){ el.innerHTML=''; tab.innerHTML='<div class="empty">Importe tes backtests pour projeter ton compte.</div>'; note.innerHTML=''; tag.textContent='—'; tag.className='tag a'; return; }
+  const money0=n=>fmt(n,0)+' $';
+  el.innerHTML=[
+    {lab:'Solde actuel', val:money0(p12.eq0), sub:'point de départ'},
+    {lab:'Médiane à 12 mois', val:money0(p12.med), cls:p12.med>=p12.eq0?'pos':'neg', sub:'le scénario typique'},
+    {lab:'Pire 5 % à 12 mois', val:money0(p12.p05), cls:p12.p05>=p12.eq0?'warn':'neg', sub:'1 scénario sur 20 fait pire'},
+    {lab:'Drawdown déjà vécu', val:pct(QA.drawdownPct,2), cls:QA.drawdownPct>=p12.ddMax?'neg':'warn',
+     sub:'ta limite : '+pct(p12.ddMax,0)+(QA.drawdownPct>=p12.ddMax?' — déjà dépassée dans le passé':'')}
+  ].map(statHTML).join('');
+  let h='<div style="overflow:auto"><table style="font-size:12.5px"><thead><tr>'
+    +'<th>Horizon</th><th>Trades attendus</th><th>Pire 5 %</th><th>Médiane</th><th>Meilleur 5 %</th><th>Prob. de perte</th><th>Prob. limite DD</th>'
+    +'</tr></thead><tbody>';
+  [3,6,12].forEach(m=>{
+    const p=(m===12)?p12:projectionLive(a, m, 2000);
+    if(!p) return;
+    h+='<tr><td>'+m+' mois</td><td>'+p.n.toLocaleString('fr-FR')+'</td>'
+      +'<td class="'+(p.p05>=p.eq0?'':'neg')+'">'+money0(p.p05)+'</td>'
+      +'<td class="'+(p.med>=p.eq0?'pos':'neg')+'">'+money0(p.med)+'</td>'
+      +'<td class="pos">'+money0(p.p95)+'</td>'
+      +'<td>'+pct(p.probPerte,1)+'</td>'
+      +'<td class="'+(p.probDD>30?'neg':'')+'">'+pct(p.probDD,1)+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  tab.innerHTML=h;
+  const ddHist=QA.drawdownPct;
+  note.innerHTML='Chaque ligne rejoue '+p12.nSim.toLocaleString('fr-FR')+' fois le portefeuille en tirant au hasard, avec remise, dans les trades de tes backtests ramenés à ton risque ('+riskTxt()+'). '
+    +'<br>🔴 <b>Ne te fie pas à la probabilité de drawdown.</b> Le tirage traite les trades comme indépendants : il casse les séries de pertes, qui sont précisément ce qui creuse les drawdowns. Il les <b>sous-estime donc lourdement</b>. Le repère qui compte est l\'historique : le portefeuille backtesté a lui-même connu <b>'+pct(ddHist,2)+'</b> de drawdown'
+    +(ddHist>=p12.ddMax?' — soit <b class="neg">au-delà de ta limite de '+pct(p12.ddMax,0)+'</b>. Autrement dit, ce portefeuille a déjà dépassé ton seuil par le passé, quoi qu\'en dise la simulation.':', contre une limite fixée à '+pct(p12.ddMax,0)+'.')
+    +'<br>⚠ <b>Ce n\'est pas une prévision.</b> Le tirage suppose que le futur ressemble au passé. Il ne modélise ni changement de régime de marché, ni EA qui cesserait de fonctionner. Lis « pire 5 % » comme un ordre de grandeur optimiste, pas comme un plancher.';
+  // Le verdict s'appuie sur le drawdown HISTORIQUE, pas sur la probabilité simulée :
+  // celle-ci est structurellement trop basse et donnerait un faux sentiment de sécurité.
+  const risque = ddHist>=p12.ddMax ? 'r' : ddHist>=p12.ddMax*0.7 ? 'a' : 'g';
+  tag.textContent = risque==='r' ? 'DD historique > ta limite' : risque==='a' ? 'DD historique proche' : 'marge confortable';
+  tag.className='tag '+risque;
 }
 
 /* ---------- #2 fraîcheur des données ---------- */
