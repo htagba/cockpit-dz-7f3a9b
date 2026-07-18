@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cockpit Darwinex Zero</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><defs><linearGradient id=%22g%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22><stop offset=%220%22 stop-color=%22%237c6df2%22/><stop offset=%221%22 stop-color=%22%23388bfd%22/></linearGradient></defs><rect width=%22100%22 height=%22100%22 rx=%2224%22 fill=%22url(%23g)%22/><text x=%2250%22 y=%2268%22 font-family=%22Arial%22 font-size=%2246%22 font-weight=%22bold%22 fill=%22white%22 text-anchor=%22middle%22>DZ</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{
@@ -17,11 +18,20 @@
     --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(1100px 500px at 15% -10%, rgba(124,109,242,.09), transparent 60%),
+                     radial-gradient(900px 420px at 95% 0%, rgba(56,139,253,.07), transparent 55%);
+    background-attachment:fixed}
+  ::selection{background:rgba(124,109,242,.35)}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#2a3140;border-radius:99px;border:2px solid var(--bg)}
+  ::-webkit-scrollbar-thumb:hover{background:#3a445a}
   .wrap{max-width:1180px;margin:0 auto;padding:20px 22px 60px}
   header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
   .brand{display:flex;align-items:center;gap:12px}
-  .logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,var(--accent),var(--blue));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;color:#fff}
+  @keyframes logoShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+  .logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,var(--accent),var(--blue),var(--accent));background-size:220% 220%;animation:logoShift 9s ease infinite;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;color:#fff;box-shadow:0 4px 18px rgba(124,109,242,.35)}
   .brand h1{font-size:18px;font-weight:600;letter-spacing:-.2px}
   .brand .sub{font-size:12px;color:var(--muted)}
   .conn{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -29,29 +39,34 @@
   .dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
   .dot.on{background:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
   .dot.off{background:var(--red);box-shadow:0 0 0 3px var(--red-soft)}
-  button{font-family:inherit;font-size:13px;color:var(--text);background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;cursor:pointer;transition:.12s;display:inline-flex;align-items:center;gap:7px}
-  button:hover{border-color:var(--accent);background:#222a3a}
-  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button{font-family:inherit;font-size:13px;color:var(--text);background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;cursor:pointer;transition:transform .15s,box-shadow .15s,border-color .15s,background .15s;display:inline-flex;align-items:center;gap:7px}
+  button:hover{border-color:var(--accent);background:#222a3a;transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.3)}
+  button:active{transform:translateY(0)}
+  button.primary{background:linear-gradient(135deg,var(--accent),#5b8bf5);border-color:transparent;color:#fff;box-shadow:0 4px 16px rgba(124,109,242,.3)}
   button.primary:hover{filter:brightness(1.08)}
   button.ghost{background:transparent}
   button.sm{padding:5px 10px;font-size:12px}
-  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:22px;flex-wrap:wrap}
-  .tab{padding:10px 16px;font-size:14px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:7px}
-  .tab:hover{color:var(--text)}
-  .tab.active{color:var(--text);border-bottom-color:var(--accent);font-weight:500}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:22px;flex-wrap:wrap;position:sticky;top:0;z-index:60;background:rgba(14,17,23,.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding-top:6px}
+  .tab{padding:9px 15px;font-size:14px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:7px;border-radius:9px 9px 0 0;transition:color .15s,background .15s,border-color .15s}
+  .tab:hover{color:var(--text);background:rgba(124,109,242,.08)}
+  .tab.active{color:var(--text);border-bottom-color:var(--accent);font-weight:500;background:linear-gradient(180deg,rgba(124,109,242,.14),transparent)}
   .view{display:none}
-  .view.active{display:block;animation:fade .2s ease}
-  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .view.active{display:block;animation:fade .28s cubic-bezier(.2,.7,.3,1)}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   .grid{display:grid;gap:14px}
   .g4{grid-template-columns:repeat(4,1fr)}
   .g3{grid-template-columns:repeat(3,1fr)}
   .g2{grid-template-columns:repeat(2,1fr)}
   @media(max-width:880px){.g4{grid-template-columns:repeat(2,1fr)}.g3,.g2{grid-template-columns:1fr}}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+  .card{background:linear-gradient(180deg,rgba(255,255,255,.015),transparent 40%),var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px;transition:border-color .2s,box-shadow .2s,transform .2s}
+  .card:hover{border-color:#3a445a;box-shadow:0 8px 28px rgba(0,0,0,.28)}
   .card h3{font-size:13px;font-weight:500;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between}
-  .stat{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+  .stat{background:linear-gradient(180deg,rgba(255,255,255,.02),transparent 45%),var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;transition:border-color .2s,transform .2s,box-shadow .2s}
+  .stat:hover{border-color:#3a445a;transform:translateY(-2px);box-shadow:0 10px 26px rgba(0,0,0,.3)}
   .stat .lab{font-size:12px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
-  .stat .val{font-size:26px;font-weight:600;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+  .stat .val{font-size:26px;font-weight:650;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+  .stat .val.pos{text-shadow:0 0 22px rgba(46,160,67,.35)}
+  .stat .val.neg{text-shadow:0 0 22px rgba(248,81,73,.3)}
   .stat .delta{font-size:12px;margin-top:4px;color:var(--muted)}
   .pos{color:var(--green)} .neg{color:var(--red)} .warn{color:var(--amber)}
   .section-title{font-size:15px;font-weight:600;margin:26px 0 12px;display:flex;align-items:center;gap:8px}
@@ -324,7 +339,7 @@
         </select>
       </div>
       <div id="monthHeat" style="overflow:auto;margin-top:12px"></div>
-      <div class="help">Chaque cellule = rendement du mois (vert = positif, rouge = négatif). Aligné sur le scoring DarwinIA, qui note le rendement mois par mois. Le backtest est ramené à ton risque de <span id="monthHeatHelpTxt">0,5 % (÷2)</span>.</div>
+      <div class="help">Chaque cellule = rendement du mois (vert = positif, rouge = négatif). Aligné sur le scoring DarwinIA, qui note le rendement mois par mois. La source « portefeuille » reprend la performance mensuelle du rapport QuantAnalyzer, au risque de <span id="monthHeatHelpTxt">0,5 %</span> par trade — rapportée au solde de début de mois.</div>
     </div>
   </div>
 
@@ -353,7 +368,10 @@
 
     <details class="card" data-sect="btList" id="btListWrap" style="margin-top:14px">
       <summary><h3>Détail et réglages de chaque backtest</h3></summary>
-      <div class="sect-body"><div id="btList"></div></div>
+      <div class="sect-body">
+        <div class="alert warn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div>Ces chiffres sont ceux de chaque rapport MT5, avec les <b>lots natifs de l'EA</b> — qui ne correspondent pas à un risque uniforme. Vérifié en appariant les trades au rapport QuantAnalyzer : pour obtenir 0,5 % de risque, il redimensionne les lots d'un facteur allant de <b>×0,03</b> (Imperium CHFJPY) à <b>×1,30</b> (TNT USDCHF). Le sélecteur « Afficher les stats à » n'est donc qu'<b>indicatif</b> ici. Les références fiables au risque réel sont dans « Portefeuille combiné » et « Contrôle live », toutes deux calées sur le rapport.</div></div>
+        <div id="btList"></div>
+      </div>
     </details>
 
     <details class="card" data-sect="btCombo" id="btComboCard" style="margin-top:14px" open>
@@ -375,7 +393,7 @@
     <details class="card" data-sect="btRatios" id="btRatiosCard" style="margin-top:14px" open>
       <summary><h3>Ratios de qualité <span class="tag a" id="btRatiosTag">—</span></h3></summary>
       <div class="sect-body">
-        <div class="help" style="margin-bottom:10px">Mesurés sur le compte unique simulé, au risque choisi ci-dessus. Ils permettent de comparer ce portefeuille aux standards du métier.</div>
+        <div class="help" style="margin-bottom:10px">Mesurés sur le compte unique simulé à partir des backtests importés (<b>lots natifs des EA</b>, mis à l'échelle du sélecteur ci-dessus — indicatif). Utiles pour comparer la <b>qualité</b> du portefeuille aux standards du métier ; pour les montants et le drawdown au money management réel, réfère-toi à « Portefeuille combiné » et « Contrôle live ».</div>
         <div class="grid g4" id="btRatiosStats"></div>
         <div class="help" style="margin-top:10px" id="btRatiosNote"></div>
       </div>
@@ -469,6 +487,15 @@
   <!-- CONTRÔLE LIVE -->
   <div class="view" id="v-controle">
     <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Ces quatre contrôles répondent à une seule question : <b>ton live tient-il la promesse du backtest ?</b> Ils s'appuient sur l'appariement <b>magic number → backtest</b> que tu renseignes dans l'onglet « Backtests ». Tant que l'échantillon est trop petit, l'app annonce le nombre de trades manquants au lieu d'un verdict — pour ne pas couper un EA sur du bruit.</div></div>
+    <div class="help" style="margin-bottom:4px"><b>D'où viennent les références ?</b> Des <b>backtests individuels</b> (lancés à 1 %), rejoués à ton risque live <b id="ctrlRiskTxt">0,5 %</b> — celui du « Garde-fou risque ». Le rendement de chaque trade est mesuré sur le <b>solde courant</b> du backtest, pas sur son dépôt initial, car ces backtests composent leurs gains. Le rapport QuantAnalyzer du portefeuille n'est <b>pas</b> utilisé ici : il ne donne aucun détail par set, et son trade moyen correspond à un compte passé de 100 000 $ à 11,6 M$ — incomparable au tien. Seule exception : le drawdown de référence de la projection, qui vient bien du rapport.</div>
+
+    <details class="card" data-sect="ctrlAvis" style="margin-top:14px" open>
+      <summary><h3>Conseils de gestion du portefeuille <span class="tag a" id="ctrlAvisTag">—</span></h3></summary>
+      <div class="sect-body">
+        <div class="help" style="margin-bottom:10px">Synthèse actionnable : ce que tes chiffres réels, comparés à la référence du rapport QuantAnalyzer, suggèrent de faire — et surtout de <b>ne pas</b> faire. Classés du plus urgent au plus accessoire. Estimations indicatives, pas un conseil en investissement.</div>
+        <div id="ctrlAvis"><div class="empty">Connecte ton compte (ou attends la synchronisation) pour obtenir les recommandations.</div></div>
+      </div>
+    </details>
 
     <details class="card" data-sect="ctrlDiv" style="margin-top:14px" open>
       <summary><h3>Divergence live vs backtest <span class="tag a" id="ctrlDivTag">—</span></h3></summary>
@@ -600,10 +627,11 @@ function majLibellesRisque(){
   set('calcLotTitleTxt', riskTxt());
   set('rHelpTxt', riskTxt());
   set('btLiveRiskTxt', riskTxt());
+  set('ctrlRiskTxt', riskTxt());
   set('riskConsVsTh', 'vs '+riskTxt());
-  set('btNormScaledOpt', 'Équivalent '+riskTxt()+' ('+btDivTxt()+')');
-  set('monthHeatBtOpt', 'Portefeuille backtest ('+btDivTxt()+')');
-  set('monthHeatHelpTxt', riskTxt()+' ('+btDivTxt()+')');
+  set('btNormScaledOpt', 'Ramené '+btDivTxt()+' (indicatif)');
+  set('monthHeatBtOpt', 'Portefeuille (rapport QuantAnalyzer)');
+  set('monthHeatHelpTxt', fmt(QA.risquePct,1).replace(',0','')+' %');
 }
 const pick=(o,keys)=>{for(const k of keys){if(o[k]!==undefined&&o[k]!==null&&o[k]!=='')return o[k];}return undefined;};
 
@@ -1147,6 +1175,45 @@ const round2=n=>Math.round(n*100)/100;
 const QA = {
   source:'QuantAnalyzer — Best Portfolio', risque:'0,5 % par trade (gains composés)',
   capitalInitial:100000, risquePct:0.5,
+  /* Le rapport est généré avec « 0.5%, 1.0 lots, 10.0 max. lots » : il existe un
+     PLAFOND de 10 lots. Mesuré sur les 5754 trades du rapport : le plafond mord dès
+     le trade n°1044 (solde ~800 k$) et concerne 66,8 % des trades. Au-delà, la
+     simulation n'est plus à 0,5 % de risque mais quasiment à lots fixes — le risque
+     effectif tombe à ~0,04 %/trade. Les stats de synthèse mélangent donc deux régimes.
+     La « phase libre » ci-dessous est la seule représentative d'un compte de ~100 k$. */
+  capLots:10, capPartPct:66.8, capPremierTrade:1044, capSolde:800794,
+  rendMoyenGlobalPct:0.0837,     // rendement moyen/trade sur le solde courant, TOUT l'historique
+  /* --- PHASE LIBRE du rapport : les 1043 premiers trades (02.01.2020 -> 22.06.2021),
+     avant que le plafond de 10 lots ne morde (solde 800 794 $). Seule période
+     representative d'un compte de la taille du tien. Rendements en FRACTION du
+     solde courant, au risque 0,5 % du rapport. --- */
+  libre:{ trades:1043, jours:537, capSolde:800794, moyenne:0.002021, ecartType:0.007000,
+    rends:[0.0042,0.005626,-0.001734,-0.000825,-0.003773,-0.002081,-0.003171,0.005434,0.004954,-0.003123,0.005072,0.003736,-0.000012,0.003313,0.003302,-0.00796,-0.00252,0.005362,-0.001724,-0.000497,-0.003552,-0.003431,-0.005746,0.009973,-0.002543,0.00505,0.007138,0.01015,0.002446,0.008512,-0.003739,0.00077,-0.002583,-0.001945,0.005251,0.001143,0.005188,0.006212,0.00326,0.003299,0.000249,0.006974,0.003265,0.007005,-0.003107,-0.002493,-0.003811,0.001029,-0.006692,0.003132,0.000508,0.000512,-0.002419,0.000362,0.0007,-0.000787,-0.000975,-0.000838,0.000745,-0.002272,0.001226,-0.001019,0.003063,0.005497,0.003924,0.003084,0.003426,0.003366,0.003355,0.007918,0.001568,0.00209,0.003317,-0.005295,0.003312,0.003301,0.023502,0.003474,0.00345,-0.003736,-0.004082,-0.005582,0.006235,-0.004173,0.003105,0.004891,-0.002279,0.002754,0.003744,-0.000647,-0.008169,0.004987,0.001624,-0.006511,-0.006719,0.005122,0.007823,0.016694,0.004875,0.004239,0.001217,0.003733,0.003733,0.006697,-0.007672,0.004326,0.003844,0.005901,-0.005631,0.007821,-0.003215,0.003388,0.002463,-0.003169,-0.000669,0.004367,0.009987,-0.004182,0.001902,-0.002761,0.005687,-0.001457,0.003368,0.000137,0.00675,0.003346,0.003379,0.006226,-0.003199,0.02453,0.006135,-0.011875,0.004412,0.003368,0.01249,0.016903,0.002143,-0.012612,0.003395,-0.000012,-0.00405,0.002495,-0.012444,0.024308,-0.012314,0.012456,0.002165,-0.003045,0.006157,0,0.004986,0.002468,0.006224,0.001431,-0.005593,0.012499,0.014579,0.012192,0.00934,0.005073,0.003473,0.006224,0.012384,0.002432,0.012469,0.005912,0.001028,0.004974,0.004977,0.002616,-0.012483,0.005056,0,-0.000012,0.004977,0.011154,0.007028,0.009131,0.003745,0.003801,-0.005616,0.004994,-0.00567,0.003748,-0.005614,0.004993,0.012439,0.014599,-0.010735,0.007035,0.011538,0.007635,0.024775,0.006887,0.011987,0.007276,0.005207,0.012496,0.012995,-0.012473,0.004852,0.004953,-0.000062,0.012438,0.002457,-0.012427,-0.012641,0.000227,-0.001565,-0.012505,-0.012625,0.02497,0.024362,0.001218,0.008308,-0.012076,-0.002334,0.002456,-0.004712,0.009275,0.012384,0.008269,-0.0122,0.024678,0.005274,-0.012475,0.004138,0.012631,0.019779,-0.000024,0.006108,0.015718,0.010939,-0.012054,0.006208,0.024571,0,0.005877,0.064326,0.002259,0.023205,0.010206,0.006236,-0.012395,0.003189,0,-0.009402,-0.005779,0.004573,-0.012225,0.009436,0.001148,0.002487,0.001474,0.001235,-0.012461,-0.012619,-0.004997,0.010275,0.002505,-0.012444,-0.00375,-0.003188,-0.012544,0.008738,0.006586,-0.012462,0.003798,0.003755,0.008911,-0.005022,-0.008918,0.001239,0.00178,0.004493,0.015466,0.006177,0.009331,0.006175,-0.005205,0.002858,0.002024,0.004251,-0.003651,0.006317,0.000733,-0.005489,0.003396,0.003835,0.002401,0.0089,0.009361,-0.006316,-0.001637,-0.001218,0.003169,0.002074,0.012465,0.010342,0.012076,0.003275,0.005905,0.006261,0.002921,0.006213,0.003374,0.000245,0.001858,-0.012422,-0.012652,0.004688,-0.005681,-0.00121,0.007221,0.001206,0.0124,0.009887,0.006955,0.004798,0.006054,0,0.005008,0.001466,0.003127,-0.012505,-0.005618,-0.001692,-0.000037,0.00376,0.004995,0.00379,-0.005607,0,0,0.000471,0.000162,0.003145,0.002725,0.001973,-0.005221,-0.0076,0.015884,-0.003804,-0.004745,-0.001195,0.003151,0.014503,0.001119,-0.000062,0.005582,0.000459,0.000262,0.002423,0.006262,0.001496,0.004492,0.003283,0.002082,-0.006216,0.001248,-0.009074,0.00951,0.0043,0.001738,0.006205,0.003129,0.001454,0.012564,0.006143,0.006369,-0.003747,0.002081,-0.002208,0.007475,-0.009787,0.00712,-0.003794,-0.005732,0.008089,-0.002737,-0.00065,-0.001475,-0.000188,0.002734,-0.001436,0.003254,-0.005921,0.008101,-0.01244,0.003245,-0.003119,-0.006434,0.005039,-0.003749,-0.005644,-0.001804,0.002954,-0.002085,0.00768,-0.002306,-0.009934,0.003414,0.003844,0,0.001672,-0.002574,0.006343,-0.003652,0.005778,0.007763,0.059403,0.05756,0.004308,0.003245,0.006222,0.000237,0.021832,0.00653,0.012578,0.015656,0.003507,0.033924,0.031909,-0.000237,0.004466,-0.003738,0.014172,0.003142,0.004361,0.003143,0.004382,0.003476,-0.005508,-0.003705,-0.003759,0.005046,-0.000137,-0.002897,0.003248,0.005018,0.000537,0.004717,-0.009279,0.001259,0.001206,0.006487,-0.00031,0.001285,-0.003811,-0.0037,0.003145,-0.007968,-0.005476,-0.001348,-0.000775,0.000575,-0.005626,-0.00503,0.003758,0,-0.005735,0.005572,0.004989,0.000025,-0.00376,-0.003665,-0.003742,0.000551,0.003433,-0.003739,0.006256,0.005596,0.004442,0.00326,-0.006297,-0.005652,0.006308,0.006246,0.001825,0.003466,0.003442,0.003745,0.004723,0.005022,0.002772,0.00611,0.003078,0.00382,-0.00046,-0.003124,-0.000786,-0.008368,-0.009975,-0.003473,0.003126,0.00349,-0.00559,0.00727,0.006201,0.005546,0.007244,-0.001797,-0.003742,-0.000024,0.011244,0.001562,0.007223,0.000512,-0.003835,0.000226,-0.002332,0.006974,-0.006309,-0.008238,0.005697,0.006183,0.002297,0.005006,0.010671,-0.00617,0.005024,0.014176,-0.005931,-0.000188,-0.00171,0.005577,-0.003635,-0.001569,-0.003766,-0.006831,0.006288,-0.003474,0.006007,0.010057,0.004552,-0.005614,0.007232,0.003237,-0.002499,0.005,0.014607,-0.012258,0,0.00055,0.001227,-0.000475,0.002482,0.005027,-0.003746,0.001667,0.003489,0.003477,0.001237,0.002052,0.006662,0.003063,-0.005114,-0.001274,0.001913,-0.037211,0.013362,0.007546,0.003744,0.003272,-0.003137,0.007479,0.005012,0.007245,0.008334,-0.003111,0.004459,0.003788,0.002198,0.024169,-0.005231,-0.003807,0.003157,-0.001107,-0.005653,0.003775,0.000599,-0.001282,0.004995,0.00241,0.001334,-0.006949,0.002723,0.000274,-0.008385,0,-0.005403,0.002783,0.007317,-0.001065,-0.003122,-0.000789,0.001145,-0.007613,0.003173,-0.00247,0.005316,0.007835,0.001811,-0.010121,0.008597,0.007223,0.006152,0.004292,0.006944,-0.003158,0.000714,-0.00622,0.003972,-0.005538,-0.012539,0.006261,-0.003124,-0.003787,0.001423,-0.001134,0.006301,0.007551,-0.003175,0.005622,-0.001864,0.004674,-0.000012,0.000125,-0.007264,-0.00566,0.003561,0.000124,0.003182,0.005025,0.003445,0.00735,0.003747,0.001396,0.005658,0.006288,-0.005397,-0.005559,0.001423,-0.001172,0.003632,0.005007,0.006248,-0.012539,0.001235,-0.003134,0.00555,0.006229,0.007985,0.003082,0.005568,0.005661,-0.000012,-0.00547,0.009335,0.009459,0.004992,-0.000175,0.000812,0.006127,0.001687,0,0.00626,0.005141,0.001179,0.005824,-0.00374,0.001862,0.011327,-0.003653,-0.00362,0.00104,0.003149,-0.002446,0.001852,-0.001973,-0.005075,0.001573,0.000773,0.00501,0.003378,-0.005579,-0.00118,0.00744,0.010203,0.004382,-0.002012,0.004412,0.003247,0.00326,-0.000262,0.005061,-0.005595,-0.003773,0.001461,0.000699,-0.003781,-0.005616,-0.002961,-0.005623,-0.003482,-0.003758,-0.002048,0.001244,-0.007576,-0.001198,0.005299,-0.003717,0.000475,0.003079,-0.005525,-0.003751,0.008537,0.012401,0.011613,0.003395,0.003507,-0.005556,0.005617,0.003087,-0.007015,0.000999,0.002411,0.003096,0.000112,0.005007,0.005572,-0.007056,0.006279,0.003487,0,-0.008771,-0.001664,-0.003749,0.003136,-0.004494,0.005266,0.006054,-0.004248,-0.000762,0.002426,0.001671,-0.006698,0.006247,-0.003731,-0.004569,0.012165,-0.007011,-0.003436,0.005025,0.001293,0.006243,0.005596,0.005644,-0.003067,-0.00168,-0.003212,0.003686,-0.00371,0.000637,-0.002796,-0.000401,0.000762,-0.002741,-0.003739,0.009635,-0.005277,0.00813,-0.005708,0.006247,0.001912,-0.000248,-0.003744,0.009635,-0.004107,0.001543,0,0.00151,0.000662,-0.001185,0.005596,0.005564,0.004187,0.002385,0.003887,0.005022,0.000945,0.003762,0.000125,-0.000212,0.003136,0.003761,0.005569,0.002375,0.00343,0.004837,0.004916,-0.003122,-0.006003,0.004761,-0.003727,0.00654,0.006236,0.001223,0.005613,0.006803,0.000225,0.006198,0.005594,0.005539,0.003252,0.005344,0.006573,0.005835,-0.005622,0.00407,-0.001132,0.000476,0.004407,0.006239,0.006978,0.00346,-0.001195,0.00713,0.00344,0.006306,0.003445,0.00438,0.006193,0.003472,0.009901,0.003451,0.023174,0.003422,0.004265,0.003732,0.003094,0.003737,0.003454,-0.005613,-0.005272,-0.003767,-0.003779,-0.005628,0.00375,0.001469,0,0.003845,-0.000012,0.001231,0.000862,0.003115,-0.000561,0.002025,0.000299,-0.002151,0.007946,-0.004937,0.00055,0.003138,0.000563,-0.002023,0.003179,-0.005612,0.006256,-0.00368,-0.003757,0.017271,0.014131,0.005403,-0.005975,0.000937,0.00397,-0.003738,0.00349,-0.004033,0.003711,0.003504,0.005585,-0.004456,-0.003556,0.005672,-0.005334,0.003143,0.003464,0.003759,0.006197,0.005211,0.003789,0.023569,-0.001923,-0.00859,-0.000687,-0.000613,-0.00394,-0.003744,0.008474,-0.005044,-0.003162,-0.00451,0.000969,0.006374,0.004381,0,-0.00614,0.005757,0.004414,0.004078,0.003108,0.001862,-0.001098,-0.003745,0.004333,-0.004594,-0.002182,-0.003781,-0.003736,0.003813,-0.003748,0.005466,0.006348,0.006234,-0.003692,0.003341,0.007164,0,-0.000856,-0.000893,0.000149,0.004373,0.004733,-0.001852,-0.003749,0.007301,0.006259,0.004328,0.003364,0.0002,0.003385,0.004925,-0.002061,-0.004443,-0.000598,-0.001299,-0.00376,0.003285,-0.002187,0.002856,-0.003772,0.003773,0.010041,-0.00557,0.006284,-0.002998,0,0.003157,0.004983,0.003107,0.005561,0.00354,-0.005602,-0.001985,-0.002203,0.00059,-0.000412,0.000812,0.005008,0.002535,0.004511,0.00405,0.003896,0.00496,-0.00546,0.008932,0.002737,0.020205,0.00364,0.003237,-0.006206,0.004396,0.001318,0.001236,-0.003791,0.006034,0.001222,0.007714,-0.01225,0.002872,-0.005584,0.006236,-0.000712,0.0005,-0.003746,0.002507,-0.001137,-0.004896,0.004998,0.001231,0.003874,0.005604,0.003467,-0.005621,0.003514,0.006938,-0.005588,0.00562,0.006544,0.006169,-0.000699,0.003436,0.009294,0.006171,0.006133,-0.003149,-0.006859,0.003047,-0.003747,0.001799,0.000125,0.006274,0.01083,0.003299,-0.003749,0.00552,0.003452,0.005035,-0.003706,0.001386,0.00025,-0.003751,0.003107,0.012556,0.008568,-0.005585,0.003148,0.008716,-0.004511,0.004558,0.005594] },
+  /* rendement moyen par trade (fraction, a 0,5 %) mesure par set sur la phase libre */
+  refSets:{
+    "APEX EA EURUSD H1 6Y 7.0":{n:30,r:0.002143},
+    "APEX EA GBPUSD H1 6Y 7.0":{n:39,r:0.000633},
+    "APEX EA USDCAD H1 6Y 7.0":{n:59,r:0.000970},
+    "APEX EA USDCHF H1 6Y 7.0":{n:25,r:0.004377},
+    "APEX EA USDJPY H1 6Y 7.0":{n:87,r:0.000968},
+    "Imperium Pattern EA CHFJPY M30 6Y":{n:25,r:0.001184},
+    "Imperium Pattern EA EURUSD M30 6Y":{n:48,r:0.001429},
+    "Imperium Pattern EA NZDUSD M30 6Y":{n:33,r:0.002430},
+    "Imperium Pattern EA USDCAD M30 6Y":{n:43,r:0.000446},
+    "Imperium Pattern EA USDJPY M30 6Y":{n:40,r:-0.000005},
+    "PPAEA AUDUSD H1 10Y V1":{n:25,r:0.004881},
+    "PPAEA NZDUSD H1 7Y SET":{n:24,r:0.005327},
+    "PPAEA USDCAD H1 10Y V1":{n:27,r:0.002249},
+    "PPAEA USDCHF H1 10Y V1":{n:26,r:0.004280},
+    "PPAEA USDJPY H1 10Y V1":{n:22,r:0.005210},
+    "TNT EURUSD EA H1 6Y":{n:105,r:0.001282},
+    "TNT GBPUSD EA H1 6Y":{n:99,r:0.003226},
+    "TNT NZDUSD EA H1 6Y":{n:129,r:0.001266},
+    "TNT USDCAD EA H1 6Y":{n:76,r:0.003244},
+    "TNT USDCHF EA H1 6Y":{n:72,r:0.001528},
+  },
+  phaseLibre:{ trades:1043, du:'02.01.2020', au:'22.06.2021', soldeFin:800794,
+               rendMoyenParTrade:0.2021, ecartType:0.7000, winRate:63.95, ddMax:6.40 },
   // --- synthèse ---
   totalProfit:11495514.52, trades:5754, sharpe:0.17, profitFactor:1.61,
   returnDD:24.18, winningPct:61.3, drawdown:475322.4, drawdownPct:11.3,
@@ -1219,25 +1286,6 @@ function qaConformite(bts){
   });
   const extra = imp.filter(x=> !QA.strategies.some(st=>{const k=qaNorm(st.name);return x.k===k||x.k.indexOf(k)>=0||k.indexOf(x.k)>=0;})).map(x=>x.b);
   return {matched, missing, extra, nTotal:QA.strategies.length};
-}
-/* Adapte le modèle additif (btAdditif) en objet `sim` pour les analyses de
-   robustesse (ratios, Monte Carlo, drawdowns) : équité $ jour par jour, sur un
-   capital de base cohérent avec le drawdown % du rapport QuantAnalyzer. */
-function simFromAdditif(add, capital){
-  if(!add || !add.evs || !add.evs.length) return null;
-  const byDay={};
-  add.evs.forEach(e=>{ const d=new Date(e.t*1000);
-    const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    byDay[iso]=(byDay[iso]||0)+e.pnl; });
-  const dates=Object.keys(byDay).sort();
-  let eq=capital, pic=capital, mdd=0; const serie=[];
-  dates.forEach(d=>{ eq+=byDay[d]; if(eq>pic)pic=eq; const dd=pic>0?(pic-eq)/pic*100:0; if(dd>mdd)mdd=dd; serie.push(round2(eq)); });
-  const retsTrades = capital>0 ? add.trades.map(p=>p/capital) : null;
-  const mois=Object.keys(add.parMois), moisPos=mois.filter(m=>add.parMois[m]>0).length;
-  return { dates, serie, capital, final:eq, mdd, ruine:false, precision:'additif',
-    retsTrades:(retsTrades&&retsTrades.length)?retsTrades:null, net:add.net,
-    rendement: capital>0?(eq-capital)/capital*100:0,
-    mois:mois.length, moisPos, moisPositifs: mois.length?moisPos/mois.length*100:0 };
 }
 /* Grille « année × mois » en $ (vert/rouge), avec total annuel. `monthsObj` :
    { 'AAAA-MM': montant } ou { AAAA:[12 valeurs] }. */
@@ -2075,40 +2123,42 @@ function btExportPDF(){
   H.push('<h1>Rapport de portefeuille</h1>');
   H.push('<div class="meta">Cockpit Darwinex Zero · '+bts.length+' sets · généré le '+new Date().toLocaleString('fr-FR')+'</div>');
 
-  H.push('<h2>Portefeuille combiné — compte unique composé (à '+btStatTxt()+')</h2>');
+  H.push('<h2>Portefeuille — rapport QuantAnalyzer ('+fmt(QA.risquePct,1).replace(',0','')+' % / trade, plafond '+QA.capLots+' lots — money management réel)</h2>');
   H.push(tuiles([
-    {lab:'Capital de départ',val:money0(sim.capital)},
-    {lab:'Balance finale',val:money0(sim.final),cls:sim.final>=sim.capital?'pos':'neg',sub:(sim.final>=sim.capital?'+':'')+money0(sim.final-sim.capital)},
-    {lab:'Rendement',val:pct(sim.rendement,1),cls:sim.rendement>=0?'pos':'neg'},
-    {lab:'Drawdown max',val:pct(sim.mdd,1),cls:'warn'},
-    {lab:'CAGR',val:R&&R.cagr!=null?pct(R.cagr,1):'—',cls:'pos'},
-    {lab:'Sharpe / Sortino',val:R?fmt(R.sharpe,2)+' / '+fmt(R.sortino,2):'—'},
-    {lab:'MAR (CAGR÷DD)',val:R&&R.mar!=null?fmt(R.mar,2):'—'},
-    {lab:'Positions simult. max',val:simul.max==null?'—':String(simul.max)}
+    {lab:'Profit total',val:money0(QA.totalProfit),cls:'pos',sub:'capital initial '+money0(QA.capitalInitial)},
+    {lab:'CAGR',val:pct(QA.cagr,2),cls:'pos'},
+    {lab:'Drawdown max',val:pct(QA.drawdownPct,2),cls:'warn',sub:money0(QA.drawdown)},
+    {lab:'Return / DD',val:fmt(QA.returnDD,2)},
+    {lab:'Profit factor',val:fmt(QA.profitFactor,2)},
+    {lab:'Winning %',val:pct(QA.winningPct,2)},
+    {lab:'Trade moyen',val:money0(QA.avgTrade)},
+    {lab:'SQN / Sharpe',val:fmt(QA.sqn,2)+' / '+fmt(QA.sharpe,2)}
   ]));
-  if(imgCombo) H.push('<div class="chart"><h3>Courbe d\'équité (compte unique, '+btStatTxt()+')</h3><img src="'+imgCombo+'"></div>');
+  if(imgCombo) H.push('<div class="chart"><h3>Courbe du rapport (cumul mensuel, '+fmt(QA.risquePct,1).replace(',0','')+' %)</h3><img src="'+imgCombo+'"></div>');
+  H.push('<div class="note"><b>Phase libre</b> (avant le plafond de '+QA.capLots+' lots, seule représentative d\'un compte de ~100 k$) : '
+    +fmt(QA.phaseLibre.rendMoyenParTrade,4)+' % par trade · réussite '+pct(QA.phaseLibre.winRate,2)+' · drawdown max '+pct(QA.phaseLibre.ddMax,2)+'.</div>');
 
-  H.push('<h2>Analyse lots fixes — façon QuantAnalyzer (modèle additif, sans composer)</h2>');
+  H.push('<h2>Analyses sur les backtests importés — lots natifs des EA (indicatif)</h2>');
   H.push(tuiles([
-    {lab:'Profit net',val:money0(add.net),cls:'pos'},
-    {lab:'Drawdown max',val:money0(add.mddAbs),cls:'neg',sub:pct(capBt>0?add.mddAbs/capBt*100:0,1)+' de '+money0(capBt)},
+    {lab:'Profit net (additif)',val:money0(add.net),cls:'pos'},
+    {lab:'Drawdown max',val:money0(add.mddAbs),cls:'neg'},
     {lab:'Profit factor',val:s.pf===Infinity?'∞':fmt(s.pf,2)},
     {lab:'Win rate',val:pct(s.winRate,1)},
     {lab:'Espérance / trade',val:money0(s.expectancy)},
-    {lab:'Espérance en R',val:s.expectancyR==null?'—':fmt(s.expectancyR,3)+' R'},
     {lab:'SQN (non plafonné)',val:s.sqnQA==null?'—':fmt(s.sqnQA,2)},
-    {lab:'Séries gains / pertes',val:s.maxConsecWin+' / '+s.maxConsecLoss}
+    {lab:'Séries gains / pertes',val:s.maxConsecWin+' / '+s.maxConsecLoss},
+    {lab:'Positions simult. max',val:simul.max==null?'—':String(simul.max)}
   ]));
-  H.push('<h2>Performance mensuelle ($ · lots fixes)</h2>'+grille);
+  H.push('<h2>Performance mensuelle ($ · lots natifs, indicatif)</h2>'+grille);
   if(imgHour||imgDay){ H.push('<div class="two">');
     if(imgHour) H.push('<div class="chart"><h3>P&amp;L par heure</h3><img src="'+imgHour+'"></div>');
     if(imgDay)  H.push('<div class="chart"><h3>P&amp;L par jour de semaine</h3><img src="'+imgDay+'"></div>');
     H.push('</div>'); }
 
-  H.push('<h2>Épisodes de drawdown (compte unique)</h2>'+ddTab);
+  H.push('<h2>Épisodes de drawdown (compte unique simulé, lots natifs)</h2>'+ddTab);
 
-  H.push('<div class="note"><b>Deux modèles, deux réponses.</b> Le « compte unique composé » suppose que chaque EA risque un % du capital commun qui grossit (intérêts composés). '
-    +'Le « lots fixes » garde les lots d\'origine sans composer (modèle QuantAnalyzer). La réalité dépend du sizing de tes EA et se situe entre les deux. '
+  H.push('<div class="note"><b>Lecture.</b> La première section reprend le rapport QuantAnalyzer, généré avec le money management réellement utilisé (risque '+fmt(QA.risquePct,1).replace(',0','')+' % du solde, plafond '+QA.capLots+' lots) : c\'est la référence. '
+    +'Les sections suivantes analysent les rapports MT5 importés avec les <b>lots natifs de chaque EA</b> — un sizing hétérogène (facteur ×0,03 à ×1,30 vs le rapport) : elles renseignent sur la qualité et la répartition des trades, pas sur les montants attendus. '
     +'Estimations indicatives à partir de backtests — pas une garantie de performance future, ni un conseil en investissement.</div>');
   H.push('<footer>Cockpit Darwinex Zero — rapport généré localement. Les backtests couvrent '+(R?fmt(R.ans,1):'?')+' ans.</footer>');
   H.push('</body></html>');
@@ -2297,7 +2347,7 @@ function renderBtCombo(){
 
   const conform=document.getElementById('btComboConform');
   if(allIn){
-    conform.innerHTML='<div class="alert ok"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg><div><b>'+conf.nTotal+'/'+conf.nTotal+' sets du portefeuille importés.</b> Les chiffres ci-dessous sont ceux du rapport <b>QuantAnalyzer « Best Portfolio »</b> — money management <b>'+fmt(QA.risquePct,1).replace(',0','')+' % de risque par trade, gains composés</b>, capital initial '+money0(QA.capitalInitial)+'. C\'est le money management utilisé en réel.</div></div>';
+    conform.innerHTML='<div class="alert ok"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg><div><b>'+conf.nTotal+'/'+conf.nTotal+' sets du portefeuille importés.</b> Les chiffres ci-dessous sont ceux du rapport <b>QuantAnalyzer « Best Portfolio »</b> — money management <b>'+fmt(QA.risquePct,1).replace(',0','')+' % de risque par trade, gains composés</b>, capital initial '+money0(QA.capitalInitial)+', <b>plafond '+QA.capLots+' lots</b> (comme ton compte réel). C\'est le money management utilisé en réel.</div></div>';
   } else {
     conform.innerHTML='<div class="alert warn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div><b>'+conf.matched.length+'/'+conf.nTotal+' sets importés.</b> Les chiffres ci-dessous restent ceux du rapport QuantAnalyzer, qui décrit le portefeuille <b>complet</b>. Sets manquants : '+conf.missing.map(s=>s.name).join(', ')+'.</div></div>'
       +(conf.extra.length?'<div class="help" style="margin-bottom:4px">'+conf.extra.length+' backtest(s) hors portefeuille de référence : '+conf.extra.map(b=>b.name).join(', ')+'.</div>':'');
@@ -2391,7 +2441,9 @@ function renderBtCombo(){
       +'<b>Pourquoi pas un calcul de l\'app ?</b> QuantAnalyzer dimensionne chaque position avec son propre moteur de money management, que l\'app ne peut pas reproduire : son modèle composé, où les '+conf.nTotal+' sets risquent chacun un % du capital <i>commun</i> simultanément, en est très loin. Afficher le rapport est donc le seul moyen d\'être fidèle.'
       +'<br>Ce que l\'app calcule vraiment sur tes imports : la <b>conformité</b> ('+conf.matched.length+'/'+conf.nTotal+' sets appariés), la <b>corrélation</b> des sets et les <b>analyses de robustesse</b> ci-dessous, qui rejouent le portefeuille au risque choisi dans « Afficher les stats à » ('+btStatTxt()+').'
       +'<br>⚠ Le sélecteur « Afficher les stats à » <b>n\'affecte pas</b> cette section : les gains y sont composés, donc diviser le risque par 2 ne divise pas le résultat par 2. Elle reste au '+rTxt+' du rapport.'
-      +'<br>⚠ <b>Projection, pas une promesse.</b> Les backtests supposent que chaque set se comporte à l\'avenir comme dans le passé — ce que rien ne garantit.';
+      +'<br>⚠ <b>Projection, pas une promesse.</b> Les backtests supposent que chaque set se comporte à l\'avenir comme dans le passé — ce que rien ne garantit.'
+      +'<br>🔴 <b>Ces chiffres décrivent surtout un gros compte, pas le tien.</b> Le rapport est plafonné à <b>'+QA.capLots+' lots</b> par position. Mesuré sur ses '+QA.trades.toLocaleString('fr-FR')+' trades : le plafond mord dès le trade n°'+QA.capPremierTrade+' (solde ~'+money0(QA.capSolde)+') et concerne <b>'+fmt(QA.capPartPct,1)+' %</b> des trades. Au-delà, la simulation n\'est plus à '+fmt(QA.risquePct,1).replace(',0','')+' % de risque mais quasiment à lots fixes — le risque effectif tombe vers 0,04 %/trade. '
+      +'Seule la <b>phase libre</b> (les '+QA.phaseLibre.trades.toLocaleString('fr-FR')+' premiers trades, du '+QA.phaseLibre.du+' au '+QA.phaseLibre.au+', de '+money0(QA.capitalInitial)+' à '+money0(QA.phaseLibre.soldeFin)+') est représentative d\'un compte de ta taille : elle affiche <b>'+fmt(QA.phaseLibre.rendMoyenParTrade,4)+' % par trade</b>, <b>'+pct(QA.phaseLibre.winRate,2)+'</b> de réussite et un drawdown max de <b>'+pct(QA.phaseLibre.ddMax,2)+'</b> — contre '+fmt(QA.rendMoyenGlobalPct,4)+' % par trade, '+pct(QA.winningPct,2)+' et '+pct(QA.drawdownPct,2)+' sur l\'ensemble (rendements mesurés sur le solde courant).';
   }
 
   // ---- analyses de robustesse : sur le même portefeuille, au risque choisi ----
@@ -2432,8 +2484,9 @@ function renderBtCompare(a){
   cv._chart=new Chart(cv,{type:'line',data:{labels,datasets},options:{plugins:{legend:{display:true,labels:{color:'#8b95a5',boxWidth:12}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y}${norm==='base100'?'':' %'}`}}},scales:{x:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',maxTicksLimit:9}},y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',callback:v=>v+(norm==='base100'?'':' %')}}}}});
   if(!bts.length){ note.textContent = store.backtests.length ? 'Coche au moins un backtest (« portefeuille ») pour le comparer à ton live.' : 'Importe tes backtests ci-dessus pour superposer la référence à ton live.'; return; }
   const lr=live.total||0, br=bt.total||0;
-  if(period==='sincelive'){ const diff=lr-br; note.textContent=`Depuis ${startISO} : live ${pct(lr,2)} vs backtest${norm==='scaled'?' ('+btDivTxt()+')':''} ${pct(br,2)}. `+(Math.abs(diff)<0.05?'Le live suit la référence. 👍':(diff>0?'Le live surperforme la référence.':'Le live sous-performe la référence — à surveiller.')); }
-  else { note.textContent=`Portefeuille backtesté complet (${labels[0]} → ${labels[labels.length-1]}) : ${pct(br,1)}${norm==='scaled'?' ('+btDivTxt()+')':''}. Ton live (${pct(lr,2)} depuis ${startISO}) apparaît à droite — c'est normal qu'il soit court au début, il s'étoffera avec le temps.`; }
+  const caveat=' ⚠ Courbe backtest en lots natifs des EA (risque non uniforme) : compare la FORME, pas le niveau — le verdict chiffré fiable est dans « Contrôle live ».';
+  if(period==='sincelive'){ const diff=lr-br; note.textContent=`Depuis ${startISO} : live ${pct(lr,2)} vs backtest${norm==='scaled'?' ('+btDivTxt()+')':''} ${pct(br,2)}.`+caveat; }
+  else { note.textContent=`Portefeuille backtesté complet (${labels[0]} → ${labels[labels.length-1]}) : ${pct(br,1)}${norm==='scaled'?' ('+btDivTxt()+')':''}. Ton live (${pct(lr,2)} depuis ${startISO}) apparaît à droite — c'est normal qu'il soit court au début.`+caveat; }
 }
 
 /* ================= ONGLET CONTRÔLE LIVE =================
@@ -2445,13 +2498,37 @@ function btMagic(b){
   const m=(b.magic!=null&&b.magic!=='')?String(b.magic):(autoMagic(b.name)||'');
   return m?String(m):'';
 }
-/* Référence d'un set, telle que mesurée dans SON backtest (à 1 %). */
+/* ---------- calibrage sur le rapport QuantAnalyzer ----------
+   ⚠ Les backtests individuels ne sont PAS à un risque uniforme : ce sont les lots
+   natifs de chaque EA. Vérifié en appariant les trades du rapport aux backtests :
+   QuantAnalyzer redimensionne chaque trade pour risquer 0,5 % du solde, avec un
+   facteur qui va de ×0,03 (Imperium CHFJPY) à ×1,30 (TNT USDCHF) — 1 à 43 entre les
+   sets. Toute mise à l'échelle uniforme « backtest à 1 % ÷ 2 » est donc FAUSSE.
+   Les rendements attendus viennent désormais du rapport lui-même (phase libre). */
+
+/* Facteur entre le risque live courant et celui du rapport (0,5 %). */
+const qaRiskScale = () => riskCible() / (QA.risquePct || 0.5);
+/* Solde à partir duquel le plafond de 10 lots commence à mordre, au risque courant :
+   plus le risque est élevé, plus tôt le plafond est atteint. */
+const qaCapSolde = () => (QA.libre.capSolde) * ((QA.risquePct||0.5) / (riskCible()||0.5));
+/* Rendements par trade de la phase libre, ramenés au risque live. */
+function qaRendsLive(){
+  const k=qaRiskScale();
+  return QA.libre.rends.map(r=>r*k);
+}
+/* Rendement moyen attendu par trade (fraction du solde), au risque live. */
+const qaMoyenneLive = () => QA.libre.moyenne * qaRiskScale();
+/* Référence d'un set : rendement/trade mesuré dans le rapport (phase libre, 0,5 %),
+   ramené au risque live ; taux de réussite et cadence issus de SON backtest complet
+   (ces deux-là ne dépendent pas du sizing, et l'échantillon y est bien plus grand). */
 function btRefSet(b){
-  const s=b.stats||{}, dep=Number(b.deposit)||100000, n=s.nbTrades||0;
+  const s=b.stats||{}, n=s.nbTrades||0;
   const d=b.days||[];
   const spanJours = d.length>1 ? btNbJours(d[0][0], d[d.length-1][0]) : 0;
-  return { n, winRate:s.winRate||0, maxDDpct:s.maxDDpct||0, spanJours,
-    avgTradePct: (n && dep>0) ? (s.net/n)/dep*100 : null,      // % du capital par trade
+  const ref=(QA.refSets||{})[b.name||''] || null;
+  return { n, winRate:s.winRate||0, spanJours,
+    avgTradePct: ref ? ref.r*qaRiskScale()*100 : null,   // % du solde par trade
+    refN: ref ? ref.n : 0,                               // taille de l'échantillon du rapport
     joursParTrade: (n && spanJours>0) ? spanJours/n : null };
 }
 
@@ -2460,12 +2537,12 @@ function btRefSet(b){
    Le verdict retient le plus sévère. En dessous de 20 trades on ne tranche pas :
    un écart de win rate sur 8 trades ne veut rien dire. */
 function divergenceSet(b, g, a){
-  const ref=btRefSet(b), ech=btScale();
-  const attWin=ref.winRate;
-  const attAvgPct=(ref.avgTradePct==null)?null:ref.avgTradePct*ech;
+  const ref=btRefSet(b);
+  const attWin=ref.winRate;              // taux de réussite du backtest complet
+  const attAvgPct=ref.avgTradePct;       // % par trade, mesuré dans le rapport au risque live
   const cl=((g&&g.closed)||[]).filter(t=>t.closeTime);
   const n=cl.length;
-  if(!n) return {n:0, attWin, attAvgPct, attDD:ref.maxDDpct*ech, statut:'vide'};
+  if(!n) return {n:0, attWin, attAvgPct, refN:ref.refN, statut:'vide'};
   const dep=a.dep||100000;
   const obsWin=cl.filter(t=>t.profit>0).length/n*100;
   const rs=cl.map(t=>t.profit/dep*100);
@@ -2488,8 +2565,8 @@ function divergenceSet(b, g, a){
   // Ce qui déclenche le verdict : l'espérance ou le taux de réussite. Sert à
   // n'afficher « X trades pour trancher » que quand c'est bien la réussite qui parle.
   const cause = Math.abs(t)>=Math.abs(z) ? 'espérance' : 'réussite';
-  return {n, attWin, attAvgPct, attDD:ref.maxDDpct*ech, obsWin, obsAvgPct:moy,
-          z, t, nNec, statut, cause, sous:(attAvgPct!=null && moy<attAvgPct), dd:setDD(g)};
+  return {n, attWin, attAvgPct, refN:ref.refN, obsWin, obsAvgPct:moy,
+          z, t, nNec, statut, cause, sous:(attAvgPct!=null && moy<attAvgPct)};
 }
 
 /* ---------- 2. EA silencieux ----------
@@ -2526,58 +2603,151 @@ function coutsLive(a){
     coutParTrade:cout/n, coutParLot:lots>0?cout/lots:null,
     partDuBrut:gross!==0?Math.abs(cout)/Math.abs(gross)*100:null};
 }
-/* Trade moyen attendu du portefeuille backtesté, ramené au risque live. */
+/* Trade moyen attendu du portefeuille, mesuré sur la PHASE LIBRE du rapport
+   QuantAnalyzer (money management réel) et ramené au risque live. */
 function btAttenduParTrade(a){
-  const bts=store.backtests.filter(b=>b.included!==false);
-  let sumPct=0, n=0;
-  bts.forEach(b=>{ const dep=Number(b.deposit)||100000, s=b.stats||{};
-    if(s.net!=null && dep>0){ sumPct+=s.net/dep*100; n+=s.nbTrades||0; } });
-  if(!n) return null;
-  const pct=sumPct/n*btScale();
-  return {pct, usd:pct/100*(a.dep||100000), n};
+  if(!QA.libre || !QA.libre.trades) return null;
+  const pct=qaMoyenneLive()*100;
+  return {pct, usd:pct/100*(a.dep||100000), n:QA.libre.trades};
 }
 
 /* ---------- 4. projection Monte Carlo du compte réel ----------
    On tire au hasard, AVEC remise, dans les rendements par trade du portefeuille
    backtesté (ramenés au risque live), sur le nombre de trades attendu à l'horizon.
    Limite assumée : suppose les trades indépendants et le futur semblable au passé. */
+/* Projection : on tire au hasard, avec remise, dans les rendements par trade de la
+   PHASE LIBRE du rapport (money management réel), ramenés au risque live.
+   Le PLAFOND DE 10 LOTS est modélisé : au-delà d'un certain solde les lots ne peuvent
+   plus grossir, donc le rendement en % se dilue proportionnellement au solde. Sans
+   ça la projection serait exponentielle et irréaliste — c'est exactement ce qui bride
+   le rapport au-delà de 800 794 $. */
 function projectionLive(a, mois, nSim){
-  const bts=store.backtests.filter(b=>b.included!==false);
-  if(!bts.length) return null;
-  const ech=btScale(); const R=[]; let totTrades=0, spanJours=0;
-  bts.forEach(b=>{
-    const dep=Number(b.deposit)||100000;
-    const src=(b.rt&&b.rt.length)?b.rt:(b.deals||[]).filter(d=>d.length<3||d[2]);
-    src.forEach(d=>R.push((d[1]/dep)*ech));
-    totTrades+=src.length;
-    const dd=b.days||[];
-    if(dd.length>1) spanJours=Math.max(spanJours, btNbJours(dd[0][0], dd[dd.length-1][0]));
-  });
-  if(R.length<50 || spanJours<=0) return null;
-  const n=Math.max(1, Math.round(totTrades/spanJours*mois*30.44));
+  if(!QA.libre || !QA.libre.rends || QA.libre.rends.length<50) return null;
+  const R=qaRendsLive();
+  const parJour=QA.libre.trades/QA.libre.jours;
+  const n=Math.max(1, Math.round(parJour*mois*30.44));
   const eq0=a.equity||a.balance||100000;
+  const cap=qaCapSolde();
   const ddMax=Number(store.settings.ddMax)||10;
   nSim=nSim||2000;
-  const fins=new Float64Array(nSim); let nBreach=0, nPos=0;
+  const fins=new Float64Array(nSim); let nBreach=0, nPos=0, nCap=0;
   for(let k=0;k<nSim;k++){
-    let B=1, pic=1, touche=false;
+    let S=eq0, pic=eq0, touche=false, plafonne=false;
     for(let j=0;j<n;j++){
-      B*=(1+R[(Math.random()*R.length)|0]);
-      if(B<=0){ B=0; touche=true; break; }
-      if(B>pic) pic=B;
-      if((pic-B)/pic*100>=ddMax) touche=true;
+      const brut=R[(Math.random()*R.length)|0];
+      // au-delà du plafond, la taille de position est figée : le % se dilue
+      const f=S>cap?cap/S:1; if(f<1) plafonne=true;
+      S*=(1+brut*f);
+      if(S<=0){ S=0; touche=true; break; }
+      if(S>pic) pic=S;
+      if((pic-S)/pic*100>=ddMax) touche=true;
     }
-    fins[k]=B; if(touche)nBreach++; if(B>1)nPos++;
+    fins[k]=S; if(touche)nBreach++; if(S>eq0)nPos++; if(plafonne)nCap++;
   }
   fins.sort();
   const q=p=>fins[Math.min(nSim-1, Math.max(0, Math.floor(p*nSim)))];
-  return {mois, n, eq0, nSim, ddMax, med:q(0.5)*eq0, p05:q(0.05)*eq0, p95:q(0.95)*eq0,
-          probDD:nBreach/nSim*100, probPerte:(1-nPos/nSim)*100};
+  return {mois, n, eq0, nSim, ddMax, cap, med:q(0.5), p05:q(0.05), p95:q(0.95),
+          probDD:nBreach/nSim*100, probPerte:(1-nPos/nSim)*100, probCap:nCap/nSim*100};
+}
+
+/* ---------- conseils de gestion du portefeuille ----------
+   Synthèse ACTIONNABLE : croise les stats réelles avec la référence du rapport
+   (phase libre) et produit des recommandations classées par urgence. Chaque règle
+   respecte le même principe que le reste de l'onglet : pas de verdict sur un
+   échantillon trop petit — la pire erreur serait de couper un EA sur du bruit. */
+function conseilsPortefeuille(a){
+  const avis=[];  // {sev:'danger'|'warn'|'info'|'ok', titre, corps}
+  const bts=store.backtests.filter(b=>b.included!==false);
+  const cl=a?a.closed.filter(t=>t.closeTime):[];
+  const nLive=cl.length;
+
+  // --- prérequis ---
+  if(!bts.length){
+    avis.push(['info','Importe tes backtests','Sans les 20 rapports HTML importés (onglet « Backtests »), aucune comparaison au rapport QuantAnalyzer n\'est possible. C\'est le préalable à tout le reste.']);
+    return avis;
+  }
+  const suivis=bts.filter(b=>btMagic(b));
+  if(suivis.length<bts.length){
+    avis.push(['info','Complète les magic numbers',(bts.length-suivis.length)+' set(s) sur '+bts.length+' n\'ont pas de magic renseigné (onglet « Backtests ») : leurs trades live ne sont pas rattachés, la surveillance par set est aveugle sur eux.']);
+  }
+  if(!nLive){
+    avis.push(['info','En attente des premiers trades','Aucun trade clôturé pour l\'instant. Laisse tourner : les conseils deviendront concrets à mesure que l\'historique réel s\'accumule. Ne modifie rien entre-temps — la référence a été validée sur 6 ans et demi de backtest.']);
+    return avis;
+  }
+
+  // --- risque / drawdown : la seule chose qui peut te sortir du jeu ---
+  const ddWarn=Number(store.settings.ddWarn)||6, ddMax=Number(store.settings.ddMax)||10;
+  if(a.curDDpct>=ddWarn){
+    avis.push(['danger','Drawdown au-dessus de ton seuil d\'alerte','Tu es à '+pct(a.curDDpct,2)+' (seuil '+pct(ddWarn,1)+', limite '+pct(ddMax,1)+'). La phase libre du rapport a connu '+pct(QA.phaseLibre.ddMax,2)+' au pire : tant que tu restes sous ce niveau, c\'est un creux « normal » du portefeuille — la bonne réponse est de RÉDUIRE le risque par trade, pas de couper des sets au hasard. Au-delà, applique ta règle de limite sans discuter.']);
+  } else if(a.curDDpct>=QA.phaseLibre.ddMax*0.7){
+    avis.push(['warn','Drawdown dans la zone haute du backtest','Ton creux actuel ('+pct(a.curDDpct,2)+') approche le pire de la phase libre du rapport ('+pct(QA.phaseLibre.ddMax,2)+'). Rien d\'anormal statistiquement, mais c\'est le moment de vérifier que chaque set trade bien comme prévu (sections ci-dessous) plutôt que d\'espérer.']);
+  }
+  if(QA.phaseLibre.ddMax>=ddMax){
+    avis.push(['warn','Ta limite de drawdown est sous l\'historique du portefeuille','Ta limite ('+pct(ddMax,1)+') est inférieure au drawdown déjà vécu par le portefeuille en phase libre ('+pct(QA.phaseLibre.ddMax,2)+' — et '+pct(QA.drawdownPct,2)+' sur tout l\'historique). Statistiquement, tu finiras par toucher ta limite même si tout fonctionne. Décide MAINTENANT, à froid : soit tu l\'assumes comme un vrai stop de sécurité, soit tu baisses le risque par trade pour t\'en éloigner.']);
+  }
+
+  // --- performance globale vs référence ---
+  const att=btAttenduParTrade(a);
+  if(att && nLive>=10){
+    const reel=a.realized/nLive, ecart=(reel-att.usd)/Math.abs(att.usd)*100;
+    if(nLive<30){
+      avis.push(['info','Trop tôt pour juger la performance ('+nLive+' trades)','Ton trade moyen réel ('+money(reel)+') vs attendu ('+money(att.usd)+') n\'est pas encore significatif — l\'écart-type du portefeuille rend tout écart normal en dessous de ~30 trades. La discipline qui paie : ne rien changer avant ce cap.']);
+    } else if(ecart<=-25){
+      avis.push(['danger','Le live sous-performe nettement la référence','Trade moyen réel '+money(reel)+' contre '+money(att.usd)+' attendu ('+fmt(ecart,0)+' %). Regarde d\'abord la section « Coût d\'exécution » : si les coûts explicites n\'expliquent pas l\'écart, cherche du slippage (VPS, broker) ou des sets qui divergent individuellement — et réduis le risque le temps de comprendre.']);
+    } else if(ecart<0){
+      avis.push(['warn','Léger retard sur la référence','Trade moyen réel '+money(reel)+' vs '+money(att.usd)+' attendu ('+fmt(ecart,0)+' %). Dans la marge du bruit et des coûts réels. Surveille la tendance, n\'agis pas encore.']);
+    } else {
+      avis.push(['ok','Le live tient (ou dépasse) la référence','Trade moyen réel '+money(reel)+' vs '+money(att.usd)+' attendu. L\'erreur classique ici serait d\'augmenter le risque après une bonne série — le rapport suppose un risque constant de '+riskTxt()+' : c\'est lui qui produit la courbe, pas les coups de chance.']);
+    }
+  }
+
+  // --- sets individuels : divergence ---
+  const divs=suivis.map(b=>({b, d:divergenceSet(b, a.groups['magic:'+btMagic(b)], a)}));
+  const diverge=divs.filter(x=>x.d.statut==='diverge');
+  const surveille=divs.filter(x=>x.d.statut==='surveiller');
+  if(diverge.length){
+    avis.push(['danger',diverge.length+' set(s) divergent de leur backtest',diverge.map(x=>'« '+x.b.name+' »').join(', ')+' : l\'écart dépasse ce que le hasard explique. Procédure raisonnable : 1) vérifie le paramétrage (set file, magic, symbole, risque) ; 2) si tout est conforme, réduis le lot de CE set de moitié plutôt que de le couper — et coupe-le seulement si la divergence persiste sur ~20 trades de plus. Ne touche pas aux autres sets.']);
+  }
+  if(surveille.length){
+    avis.push(['warn',surveille.length+' set(s) à surveiller',surveille.map(x=>'« '+x.b.name+' »').join(', ')+' : écart notable mais pas encore concluant. Rien à faire sinon les regarder de près — les couper maintenant reviendrait à décider sur du bruit.']);
+  }
+
+  // --- sets silencieux ---
+  const muets=suivis.map(b=>({b, s:silenceSet(b, a.groups['magic:'+btMagic(b)])})).filter(x=>x.s.statut==='alarme'||x.s.statut==='suspect');
+  if(muets.length){
+    const alarmes=muets.filter(x=>x.s.statut==='alarme');
+    avis.push([alarmes.length?'danger':'warn',muets.length+' set(s) anormalement silencieux',muets.map(x=>'« '+x.b.name+' »').join(', ')+' : silence improbable au vu de leur cadence de backtest. Un set muet ne perd pas d\'argent mais fausse tout le portefeuille (la diversification repose sur les 20). Vérifie dans l\'ordre : EA activé sur le graphique, magic number, autotrading MT5, connexion VPS.']);
+  }
+
+  // --- coûts ---
+  const c=coutsLive(a);
+  if(c && nLive>=30 && c.partDuBrut!=null && c.partDuBrut>25){
+    avis.push(['warn','Les coûts rongent le profit brut','Commissions + swaps représentent '+pct(c.partDuBrut,0)+' de ton profit brut ('+money(c.coutParLot||0)+'/lot). Au-delà de ~25 %, ça vaut une discussion avec ton broker (ou une comparaison) — c\'est le levier de performance le moins risqué qui existe.']);
+  }
+
+  // --- rien à signaler ---
+  if(!avis.some(x=>x[0]==='danger'||x[0]==='warn')){
+    avis.push(['ok','Rien à corriger : laisse le système travailler','Tout est dans les clous. Le meilleur geste de gestion est maintenant l\'inaction : risque constant à '+riskTxt()+', pas d\'ajout ni de retrait de set sur une impression, et un point hebdomadaire sur cet onglet suffit. Le rapport te sert de contrat : tant que le réel le respecte, on ne renégocie pas.']);
+  }
+  return avis;
+}
+
+function renderCtrlConseils(a){
+  const el=document.getElementById('ctrlAvis'), tag=document.getElementById('ctrlAvisTag');
+  if(!el) return;
+  const avis=conseilsPortefeuille(a||{closed:[],groups:{},realized:0,curDDpct:0});
+  const ic={info:'M12 16v-4M12 8h.01',ok:'M20 6 9 17l-5-5',warn:'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',danger:'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'};
+  const ordre={danger:0,warn:1,info:2,ok:3};
+  avis.sort((x,y)=>ordre[x[0]]-ordre[y[0]]);
+  el.innerHTML=avis.map(([t,h,b])=>'<div class="alert '+t+'"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="'+ic[t]+'"/></svg><div><b>'+h+'.</b> '+b+'</div></div>').join('');
+  const nD=avis.filter(x=>x[0]==='danger').length, nW=avis.filter(x=>x[0]==='warn').length;
+  tag.textContent = nD? nD+' action(s) requise(s)' : nW? nW+' point(s) à surveiller' : 'tout va bien';
+  tag.className='tag '+(nD?'r':nW?'a':'g');
 }
 
 /* ---------- rendus ---------- */
 function renderControle(a){
-  renderCtrlDivergence(a); renderCtrlSilence(a); renderCtrlCouts(a); renderCtrlProjection(a);
+  renderCtrlConseils(a); renderCtrlDivergence(a); renderCtrlSilence(a); renderCtrlCouts(a); renderCtrlProjection(a);
 }
 
 function renderCtrlDivergence(a){
@@ -2595,7 +2765,7 @@ function renderCtrlDivergence(a){
     conforme:'<span class="tag g">🟢 conforme</span>', jeune:'<span class="tag a">trop tôt</span>',
     vide:'<span style="color:var(--dim)">aucun trade</span>'}[s]||'—');
   let h='<div style="overflow:auto"><table style="font-size:12.5px"><thead><tr>'
-    +'<th>Set</th><th>Trades</th><th>Réussite réelle / attendue</th><th>Trade moyen réel / attendu</th><th>Drawdown réel / réf.</th><th>Verdict</th>'
+    +'<th>Set</th><th>Trades</th><th>Réussite réelle / attendue</th><th>Trade moyen réel / attendu</th><th>Réf. rapport</th><th>Verdict</th>'
     +'</tr></thead><tbody>';
   suivis.forEach(({b,d})=>{
     const nom=(b.name||'?'); const court=nom.length>26?nom.slice(0,25)+'…':nom;
@@ -2606,8 +2776,8 @@ function renderCtrlDivergence(a){
     else {
       const okW=d.obsWin>=d.attWin;
       h+='<td><b class="'+(okW?'pos':'neg')+'">'+pct(d.obsWin,1)+'</b> / '+pct(d.attWin,1)+'</td>'
-        +'<td><b class="'+(d.sous?'neg':'pos')+'">'+usd(d.obsAvgPct)+'</b> / '+usd(d.attAvgPct)+'</td>'
-        +'<td>'+pct(d.dd||0,2)+' / '+pct(d.attDD||0,2)+'</td>';
+        +'<td><b class="'+(d.sous?'neg':'pos')+'">'+usd(d.obsAvgPct)+'</b> / '+(d.attAvgPct==null?'<span style="color:var(--dim)">—</span>':usd(d.attAvgPct))+'</td>'
+        +'<td>'+(d.refN?d.refN+' trades':'<span style="color:var(--dim)">absent</span>')+'</td>';
     }
     let sous='';
     if(d.statut==='jeune') sous=d.n+'/20 trades';
@@ -2619,7 +2789,7 @@ function renderCtrlDivergence(a){
   h+='</tbody></table></div>';
   const sansMagic=lignes.length-suivis.length;
   if(sansMagic) h+='<div class="help" style="margin-top:8px">'+sansMagic+' set(s) sans magic renseigné, donc non suivis. Complète-les dans l\'onglet « Backtests ».</div>';
-  h+='<div class="help" style="margin-top:4px">Le trade moyen attendu est celui du backtest ramené à ton risque ('+riskTxt()+'). Un verdict n\'est rendu qu\'à partir de 20 trades, et « diverge » signifie que l\'écart dépasse ce que le hasard explique (seuil ~2,5 écarts-types).</div>';
+  h+='<div class="help" style="margin-top:4px">Le <b>trade moyen attendu</b> vient du <b>rapport QuantAnalyzer</b> (phase libre, money management réel), ramené à ton risque ('+riskTxt()+') — et non des lots d\'origine des backtests, qui ne sont pas à un risque uniforme. La colonne « Réf. rapport » donne le nombre de trades sur lequel cette référence est mesurée : en dessous de ~30, prends-la avec prudence. Le <b>taux de réussite attendu</b>, lui, vient du backtest complet du set (il ne dépend pas du sizing, et l\'échantillon y est bien plus grand). Un verdict n\'est rendu qu\'à partir de 20 trades live ; « diverge » signifie que l\'écart dépasse ce que le hasard explique (~2,5 écarts-types).</div>';
   el.innerHTML=h;
   const pires=suivis.map(x=>x.d.statut);
   const st=pires.includes('diverge')?'diverge':pires.includes('surveiller')?'surveiller':pires.some(s=>s==='conforme')?'conforme':'jeune';
@@ -2718,8 +2888,8 @@ function renderCtrlProjection(a){
     {lab:'Solde actuel', val:money0(p12.eq0), sub:'point de départ'},
     {lab:'Médiane à 12 mois', val:money0(p12.med), cls:p12.med>=p12.eq0?'pos':'neg', sub:'le scénario typique'},
     {lab:'Pire 5 % à 12 mois', val:money0(p12.p05), cls:p12.p05>=p12.eq0?'warn':'neg', sub:'1 scénario sur 20 fait pire'},
-    {lab:'Drawdown déjà vécu', val:pct(QA.drawdownPct,2), cls:QA.drawdownPct>=p12.ddMax?'neg':'warn',
-     sub:'ta limite : '+pct(p12.ddMax,0)+(QA.drawdownPct>=p12.ddMax?' — déjà dépassée dans le passé':'')}
+    {lab:'Drawdown déjà vécu', val:pct(QA.phaseLibre.ddMax,2), cls:QA.phaseLibre.ddMax>=p12.ddMax?'neg':'warn',
+     sub:'phase libre · '+pct(QA.drawdownPct,2)+' sur tout l\'historique · ta limite : '+pct(p12.ddMax,0)}
   ].map(statHTML).join('');
   let h='<div style="overflow:auto"><table style="font-size:12.5px"><thead><tr>'
     +'<th>Horizon</th><th>Trades attendus</th><th>Pire 5 %</th><th>Médiane</th><th>Meilleur 5 %</th><th>Prob. de perte</th><th>Prob. limite DD</th>'
@@ -2736,9 +2906,11 @@ function renderCtrlProjection(a){
   });
   h+='</tbody></table></div>';
   tab.innerHTML=h;
-  const ddHist=QA.drawdownPct;
-  note.innerHTML='Chaque ligne rejoue '+p12.nSim.toLocaleString('fr-FR')+' fois le portefeuille en tirant au hasard, avec remise, dans les trades de tes backtests ramenés à ton risque ('+riskTxt()+'). '
-    +'<br>🔴 <b>Ne te fie pas à la probabilité de drawdown.</b> Le tirage traite les trades comme indépendants : il casse les séries de pertes, qui sont précisément ce qui creuse les drawdowns. Il les <b>sous-estime donc lourdement</b>. Le repère qui compte est l\'historique : le portefeuille backtesté a lui-même connu <b>'+pct(ddHist,2)+'</b> de drawdown'
+  const ddHist=QA.phaseLibre.ddMax;
+  note.innerHTML='Chaque ligne rejoue '+p12.nSim.toLocaleString('fr-FR')+' fois le portefeuille en tirant au hasard, avec remise, dans les <b>'+QA.libre.trades.toLocaleString('fr-FR')+' trades de la phase libre du rapport QuantAnalyzer</b> (money management réel), ramenés à ton risque ('+riskTxt()+'). '
+    +'Le <b>plafond de 10 lots</b> est modélisé : au-delà de '+money0(p12.cap)+' de solde les positions ne grossissent plus, donc le rendement en % se dilue'
+    +(p12.probCap>1?(' — cela arrive dans <b>'+pct(p12.probCap,0)+'</b> des tirages à 12 mois.'):' (pas encore atteint dans les tirages à 12 mois).')+' '
+    +'<br>🔴 <b>Ne te fie pas à la probabilité de drawdown.</b> Le tirage traite les trades comme indépendants : il casse les séries de pertes, qui sont précisément ce qui creuse les drawdowns. Il les <b>sous-estime donc lourdement</b>. Le repère qui compte est l\'historique : sur la phase libre, le portefeuille a connu <b>'+pct(ddHist,2)+'</b> de drawdown (et '+pct(QA.drawdownPct,2)+' sur l\'historique complet)'
     +(ddHist>=p12.ddMax?' — soit <b class="neg">au-delà de ta limite de '+pct(p12.ddMax,0)+'</b>. Autrement dit, ce portefeuille a déjà dépassé ton seuil par le passé, quoi qu\'en dise la simulation.':', contre une limite fixée à '+pct(p12.ddMax,0)+'.')
     +'<br>⚠ <b>Ce n\'est pas une prévision.</b> Le tirage suppose que le futur ressemble au passé. Il ne modélise ni changement de régime de marché, ni EA qui cesserait de fonctionner. Lis « pire 5 % » comme un ordre de grandeur optimiste, pas comme un plancher.';
   // Le verdict s'appuie sur le drawdown HISTORIQUE, pas sur la probabilité simulée :
@@ -2783,9 +2955,21 @@ function renderHeat(a){
 function monthlyReturns(source,a){
   const m={};
   if(source==='backtest'){
-    const bts=store.backtests.filter(b=>b.included!==false);
-    bts.forEach(b=>b.days.forEach(([d,pnl])=>{ const k=d.slice(0,7); m[k]=(m[k]||0)+pnl/b.deposit*100; }));
-    const scale=btScale(); Object.keys(m).forEach(k=>m[k]*=scale);
+    // Rendement mensuel du RAPPORT QuantAnalyzer : montant du mois rapporté au solde
+    // en début de mois. Additionner les % des backtests individuels serait faux —
+    // ça reviendrait à supposer 20 comptes séparés, à des sizings hétérogènes.
+    let solde=QA.capitalInitial;
+    Object.keys(QA.monthly).sort().forEach(an=>{
+      QA.monthly[an].forEach((v,i)=>{
+        const k=an+'-'+String(i+1).padStart(2,'0');
+        if(solde>0) m[k]=v/solde*100;
+        solde+=v;
+      });
+    });
+    // dernière année : on retire les mois à venir (à 0) pour ne pas afficher des cases vides à 0
+    const derniere=Object.keys(QA.monthly).sort().pop();
+    for(let i=11;i>=0;i--){ const k=derniere+'-'+String(i+1).padStart(2,'0');
+      if(QA.monthly[derniere][i]===0) delete m[k]; else break; }
   } else {
     const dep=a.dep||100000;
     a.closed.forEach(t=>{ if(!t.closeTime)return; const k=t.closeTime.toISOString().slice(0,7); m[k]=(m[k]||0)+t.profit/dep*100; });
