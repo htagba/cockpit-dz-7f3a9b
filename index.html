@@ -2726,10 +2726,25 @@ async function fetchData(){
   try{ const r=await fetch(DATA_ENDPOINT+'?t='+Date.now(),{cache:'no-store'}); if(!r.ok)throw new Error('HTTP '+r.status); ingest(await r.json()); }
   catch(e){ console.error(e); setConn(false,'Fichier introuvable — le serveur tourne-t-il ?'); }
 }
+/* Affiche la fraîcheur des données en HEURE LOCALE + âge relatif.
+   `exportedAt` est écrit à l'heure du serveur du broker (GMT+3 pour Darwinex) : on
+   parse plutôt `exportedAtIso` (qui porte le décalage +03:00) pour convertir dans le
+   fuseau du navigateur, sinon l'utilisateur voit 1 h d'écart avec l'horloge de son PC.
+   L'âge (« il y a X min ») lève toute ambiguïté de fuseau : c'est un écart d'instants. */
 function updateSyncLabel(data){
   const p=document.getElementById('syncPill'); p.style.display='';
-  const t=data&&data.exportedAt?data.exportedAt:new Date().toLocaleTimeString('fr-FR');
-  document.getElementById('syncTxt').textContent='Données du '+t;
+  const el=document.getElementById('syncTxt');
+  const t = data ? parseT(data.exportedAtIso||data.exportedAt) : null;
+  if(t){
+    const heure=t.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    const min=Math.round((Date.now()-t.getTime())/60000);
+    const age = min<1 ? 'à l\'instant' : min<60 ? ('il y a '+min+' min') : ('il y a '+Math.floor(min/60)+' h '+(min%60)+' min');
+    el.textContent='Données de '+heure+' · '+age;
+    // pour référence : l'heure serveur brute telle que MT5 l'écrit
+    if(data.exportedAt) p.title='Heure serveur broker : '+data.exportedAt;
+  } else {
+    el.textContent='Données du '+((data&&data.exportedAt)||new Date().toLocaleTimeString('fr-FR'));
+  }
 }
 function setConn(on,txt){
   const dot=document.getElementById('connDot'),lab=document.getElementById('connTxt');
