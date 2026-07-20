@@ -1409,9 +1409,13 @@ function makeBarChart(cv, labels, data, couleurs, fmtVal){
               y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675'}}}}});
 }
 
-/* Détecte le magic correspondant à un backtest, d'après le REGISTRE des 34 sets :
-   nom identique/inclus (normalisé), sinon alias distinctif (slot1, gold2hswing…). */
+/* Détecte le magic correspondant à un backtest.
+   1) préfixe explicite « Magic N - … » (convention des fichiers de backtest) — le
+      plus fiable ; 2) sinon nom du REGISTRE identique/inclus (normalisé) ;
+      3) sinon alias distinctif (slot1, gold2hswing…). */
 function autoMagic(name){
+  const pref=String(name||'').match(/^\s*magic\s*(\d{1,2})\b/i);
+  if(pref){ const m=Number(pref[1]); if(regEntree(m)) return m; }
   const k=normNom(name); if(!k) return null;
   let hit=SETS_REGISTRY.find(r=>{ const rn=normNom(r.n); return rn===k || rn.includes(k) || k.includes(rn); });
   if(!hit) hit=SETS_REGISTRY.find(r=> r.a && k.includes(r.a));
