@@ -162,6 +162,7 @@
     <div class="tab" data-v="backtests"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M19 9l-5 5-4-4-4 4"/></svg>Backtests</div>
     <div class="tab" data-v="journal"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>Journal & courbe</div>
     <div class="tab" data-v="controle"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Contrôle live</div>
+    <div class="tab" data-v="demo"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>Compte démo</div>
   </div>
 
   <!-- COCKPIT -->
@@ -478,6 +479,53 @@
     </details>
   </div>
 
+  <!-- COMPTE DÉMO -->
+  <div class="view" id="v-demo">
+    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Le compte démo est le <b>banc d'essai permanent</b> des sets hors réel : chaque set y est jugé contre son backtest, exactement comme les sets réels dans « Contrôle live ». Les recommandations de rotation sont visibles en continu mais se tranchent à la <b>revue semestrielle</b> — sauf urgence (drawdown &gt; 130 % de la référence).</div></div>
+    <div class="help" style="margin-bottom:10px"><span id="demoSyncTxt">En attente du fichier démo…</span> <label style="color:var(--accent);cursor:pointer;text-decoration:underline">charger le fichier démo<input type="file" id="demoFile" accept=".json,*/*" style="display:none"></label></div>
+
+    <details class="card" data-sect="demoEtat" style="margin-top:14px" open>
+      <summary><h3>Sets en démo <span class="tag a" id="demoEtatTag">—</span></h3></summary>
+      <div class="sect-body">
+        <div class="grid g4" id="demoStats" style="margin-bottom:12px"></div>
+        <div id="demoTable"><div class="empty">En attente des données démo.</div></div>
+        <div class="help" style="margin-top:8px">Références = backtests à 0,5 % (mêmes règles que « Contrôle live ») : pas de verdict sous 20 trades. « DD réel/réf » compare le drawdown démo au drawdown du backtest ; au-delà de 110 % de la référence, le set n'est pas promouvable.</div>
+      </div>
+    </details>
+
+    <details class="card" data-sect="demoRot" style="margin-top:14px" open>
+      <summary><h3>Rotation réel ↔ démo <span class="tag a" id="demoRotTag">—</span></h3></summary>
+      <div class="sect-body">
+        <div class="help" style="margin-bottom:10px">Règles validées : un set réel sort si son drawdown dépasse <b>110 %</b> de sa référence backtest (<b>130 %</b> = urgence, sans attendre la revue). Un set démo est promouvable s'il est <b>conforme</b> à son backtest (≥ 20 trades) et <b>décorrélé</b> des sets réels (corrélation &lt; 0,3 idéale, &lt; 0,6 acceptable faute de mieux — mesurée sur les P&amp;L quotidiens des backtests). Maximum <b>20</b> sets en réel.</div>
+        <div id="demoRotation"><div class="empty">En attente des données.</div></div>
+      </div>
+    </details>
+
+    <details class="card" data-sect="demoRevue" style="margin-top:14px" open>
+      <summary><h3>Revue semestrielle &amp; Telegram <span class="tag a" id="demoRevueTag">—</span></h3></summary>
+      <div class="sect-body">
+        <div id="demoRevueEtat" class="help" style="margin-bottom:10px"></div>
+        <div class="row" style="margin-bottom:10px">
+          <div class="field" style="margin:0"><label>Token du bot Telegram</label><input type="password" id="tgToken" placeholder="123456:ABC-DEF…"></div>
+          <div class="field" style="margin:0"><label>Chat ID</label><input type="text" id="tgChat" placeholder="-100123… ou 123456789"></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="primary" id="revueGen">Générer le rapport semestriel</button>
+          <button id="revueSend" style="display:none">📤 Envoyer sur Telegram</button>
+          <button class="ghost sm" id="revueMark" title="Enregistre la date de revue sans envoyer">Marquer la revue comme faite</button>
+        </div>
+        <textarea id="revueTexte" style="display:none;width:100%;min-height:260px;font-family:var(--mono);font-size:11.5px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px"></textarea>
+        <div class="help" id="revueMsg" style="margin-top:8px"></div>
+        <div class="help" style="margin-top:6px">Le token reste dans <b>ce navigateur</b> (localStorage), il n'est jamais publié. Le rappel automatique semestriel tourne sur le VPS, indépendamment de cette page.</div>
+      </div>
+    </details>
+
+    <details class="card" data-sect="demoReg" style="margin-top:14px">
+      <summary><h3>Registre des 34 sets <span style="font-weight:400;color:var(--dim);font-size:11px">(déclare ici les bascules faites dans MT5)</span></h3></summary>
+      <div class="sect-body"><div id="demoRegistre"></div></div>
+    </details>
+  </div>
+
   <div class="foot">
     Cockpit Darwinex Zero · application locale, tes données ne quittent jamais ton ordinateur.<br>
     Lance « Lancer-Cockpit.bat » : lecture auto du fichier MT5 toutes les 5 min, sur tous les navigateurs. Estimations indicatives, pas un conseil en investissement.
@@ -492,8 +540,13 @@ const DATA_ENDPOINT = "data.json";
    démarrage (pas dans la boucle des 5 min) : ce fichier ne change que lorsque
    tu republies. Même nom en local : le serveur Python sert le dossier. */
 const BT_ENDPOINT = "backtests.json";
+/* Fichier du COMPTE DÉMO (banc d'essai des sets hors réel), même schéma que le
+   réel. En local, le serveur Python le sert sur /demo ; en ligne, le VPS pousse
+   demo.json à côté de data.json. Dérivé de DATA_ENDPOINT pour que les deux
+   fichiers HTML (local / web) ne diffèrent toujours QUE par une ligne. */
+const DEMO_ENDPOINT = (DATA_ENDPOINT === "data") ? "demo" : "demo.json";
 const SERVER_MODE = location.protocol.startsWith('http');
-let fileHandle=null, pollTimer=null, lastData=null, chart=null, lastA=null, cvMap={};
+let fileHandle=null, pollTimer=null, lastData=null, lastDemo=null, chart=null, lastA=null, lastADemo=null, cvMap={};
 
 /* ---------- persistence (settings + names + equity snapshots) ---------- */
 const LS='dzcockpit.v1';
@@ -501,22 +554,71 @@ function loadStore(){ try{return JSON.parse(localStorage.getItem(LS))||{}}catch(
 function saveStore(s){ localStorage.setItem(LS,JSON.stringify(s)); }
 let store = Object.assign({setNames:{}, equitySnaps:[], settings:{balance:100000,riskPct:0.5,ddWarn:6,ddMax:10}}, loadStore());
 store.setNames=store.setNames||{}; store.equitySnaps=store.equitySnaps||[]; store.settings=store.settings||{balance:100000,riskPct:0.5,ddWarn:6,ddMax:10};
-// Correspondance magic number -> nom du backtest (tes renommages manuels restent prioritaires).
-const DEFAULT_SET_NAMES = {
-  "magic:1":"2002 eurusd 4h swing 15m entry",
-  "magic:2":"2003 usdjpy 4h swing 20m entry",
-  "magic:3":"2000 gold 2h swing 6m entry",
-  "magic:4":"2001 gold 8h swing 12m entry",
-  "magic:5":"5 Gold London Sweep 10m Entry",
-  "magic:6":"6 GDAXI 4h Swing 20m Entry",
-  "magic:23615":"Slot 1 - EURJPY H1 Risk 1% - Dolt MultiStrategy",
-  "magic:36381":"Slot 3 - NZDUSD H1 Risk 1% - Dolt MultiStrategy",
-  "magic:27788":"Slot 4 - SP500 H1 Risk 1% - Dolt MultiStrategy",
-  "magic:44650":"Slot 5 - SP500 M15 Risk 1% - Dolt MultiStrategy",
-  "magic:15150":"Slot 2 - USDJPY H1 Risk 1% - Dolt MultiStrategy",
-  "magic:20567":"Slot 6 - XAUUSD M15 Risk 1% - Dolt MultiStrategy",
-  "magic:33940":"Slot 8 - XAUUSD H1 Risk 1% - Dolt MultiStrategy"
-};
+/* ================= REGISTRE DES 34 SETS (source : « Tous les sets.xlsx ») =====
+   Magics 1-20 = compte RÉEL (max 20 sets) · magics 21-34 = compte DÉMO (banc
+   d'essai des remplaçants). `a` = alias de reconnaissance pour apparier les noms
+   de rapports de backtest qui ne reprennent pas le libellé exact du registre. */
+const SETS_REGISTRY = [
+  {m:1,  n:"APEX EA EURUSD H1 6Y 7.0"},
+  {m:2,  n:"APEX EA GBPUSD H1 6Y 7.0"},
+  {m:3,  n:"APEX EA USDCAD H1 6Y 7.0"},
+  {m:4,  n:"APEX EA USDCHF H1 6Y 7.0"},
+  {m:5,  n:"APEX EA USDJPY H1 6Y 7.0"},
+  {m:6,  n:"Imperium Pattern EA CHFJPY M30 6Y"},
+  {m:7,  n:"Imperium Pattern EA EURUSD M30 6Y"},
+  {m:8,  n:"Imperium Pattern EA NZDUSD M30 6Y"},
+  {m:9,  n:"Imperium Pattern EA USDCAD M30 6Y"},
+  {m:10, n:"Imperium Pattern EA USDJPY M30 6Y"},
+  {m:11, n:"PPAEA AUDUSD H1 10Y V1"},
+  {m:12, n:"PPAEA NZDUSD H1 7Y SET"},
+  {m:13, n:"PPAEA USDCAD H1 10Y V1"},
+  {m:14, n:"PPAEA USDCHF H1 10Y V1"},
+  {m:15, n:"PPAEA USDJPY H1 10Y V1"},
+  {m:16, n:"TNT EURUSD EA H1 6Y"},
+  {m:17, n:"TNT GBPUSD EA H1 6Y"},
+  {m:18, n:"TNT NZDUSD EA H1 6Y"},
+  {m:19, n:"TNT USDCAD EA H1 6Y"},
+  {m:20, n:"TNT USDCHF EA H1 6Y"},
+  {m:21, n:"Swing sniper - Gold 2h swing 6m entry",      a:"gold2hswing"},
+  {m:22, n:"Swing sniper - Gold 8h swing 12m entry",     a:"gold8hswing"},
+  {m:23, n:"Swing sniper - EURUSD 4h swing 15m entry",   a:"eurusd4hswing"},
+  {m:24, n:"Swing sniper - USDJPY 4h swing 20m entry",   a:"usdjpy4hswing"},
+  {m:25, n:"Swing sniper - GDAXI 4h Swing 20m Entry",    a:"gdaxi"},
+  {m:26, n:"Swing sniper - Gold London Sweep 10m Entry", a:"londonsweep"},
+  {m:27, n:"Dolt MultiStrategy - Slot 1 - EURJPY H1",    a:"slot1"},
+  {m:28, n:"Dolt MultiStrategy - Slot 2 - USDJPY H1",    a:"slot2"},
+  {m:29, n:"Dolt MultiStrategy - Slot 3 - NZDUSD H1",    a:"slot3"},
+  {m:30, n:"Dolt MultiStrategy - Slot 4 - SP500 H1",     a:"slot4"},
+  {m:31, n:"Dolt MultiStrategy - Slot 5 - SP500 M15",    a:"slot5"},
+  {m:32, n:"Dolt MultiStrategy - Slot 6 - XAUUSD M15",   a:"slot6"},
+  {m:33, n:"Dolt MultiStrategy - Slot 7 - XAUUSD H1 - A",a:"slot7"},
+  {m:34, n:"Dolt MultiStrategy - Slot 8 - XAUUSD H1 - B",a:"slot8"}
+];
+const REEL_MAX = 20;
+const normNom = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const regEntree = m => SETS_REGISTRY.find(r=>r.m===Number(m)) || null;
+const regNom = m => { const r=regEntree(m); return r ? r.n : ('Magic '+m); };
+/* Statut d'un set : 'reel' | 'demo' | 'off'. Défaut : 1-20 réel, 21-34 démo.
+   Les bascules (rotations) sont déclarées dans l'app et historisées. */
+function regStatut(m){ const o=(store.registre||{})[String(m)]; return o ? o.statut : (Number(m)<=20?'reel':'demo'); }
+function regDepuis(m){ const o=(store.registre||{})[String(m)]; return o ? o.depuis : null; }
+function regBascule(m, statut, motif){
+  store.registre = store.registre || {};
+  store.registre[String(m)] = { statut, depuis:new Date().toISOString().slice(0,10), motif:motif||'' };
+  (store.rotations = store.rotations || []).push({ date:new Date().toISOString().slice(0,10), magic:Number(m), vers:statut, motif:motif||'' });
+  saveStore(store);
+}
+const regParStatut = st => SETS_REGISTRY.filter(r=>regStatut(r.m)===st);
+// Correspondance magic -> nom (tes renommages manuels restent prioritaires).
+const DEFAULT_SET_NAMES = {};
+SETS_REGISTRY.forEach(r=>{ DEFAULT_SET_NAMES['magic:'+r.m]=r.n; });
+/* Migration : purge les anciens noms par défaut (numérotation d'avant juillet 2026,
+   où les magics 1-6 étaient les Swing Sniper) restés dans le localStorage. */
+if(!store.registreV2){
+  const anciens=["2002 eurusd 4h swing 15m entry","2003 usdjpy 4h swing 20m entry","2000 gold 2h swing 6m entry","2001 gold 8h swing 12m entry","5 Gold London Sweep 10m Entry","6 GDAXI 4h Swing 20m Entry"];
+  Object.keys(store.setNames).forEach(k=>{ if(anciens.includes(store.setNames[k])) delete store.setNames[k]; });
+  store.registreV2=true; saveStore(store);
+}
 store.setNames = Object.assign({}, DEFAULT_SET_NAMES, store.setNames);
 
 /* ---------- IndexedDB for the file handle ---------- */
@@ -677,7 +779,7 @@ function render(){
   renderTop(a); renderDD(a); renderScore(a); renderCalibration(a); renderAdvice(a);
   renderSets(a); renderRiskTab(a); renderJournal(a); renderDarwinTab(a); renderAnalyse(a);
   renderHeat(a); renderMonthHeat(a); renderControle(a);
-  lastA=a; renderBtCompare(a); renderStale();
+  lastA=a; renderBtCompare(a); renderStale(); renderDemo();
 }
 
 function renderTop(a){
@@ -769,7 +871,7 @@ function renderSets(a){
     </div>`;}).join('');
   grid.querySelectorAll('.setname').forEach(inp=>{inp.addEventListener('change',e=>{store.setNames[e.target.dataset.key]=e.target.value.trim();saveStore(store);render();});});
 }
-function setDD(g){ const c=g.closed.slice().filter(t=>t.closeTime).sort((a,b)=>a.closeTime-b.closeTime); let run=0,peak=0,mdd=0; c.forEach(t=>{run+=t.profit;if(run>peak)peak=run;const d=peak-run;if(d>mdd)mdd=d;}); const base=store.settings.balance||100000; return base>0?mdd/base*100:0; }
+function setDD(g, base){ const c=g.closed.slice().filter(t=>t.closeTime).sort((a,b)=>a.closeTime-b.closeTime); let run=0,peak=0,mdd=0; c.forEach(t=>{run+=t.profit;if(run>peak)peak=run;const d=peak-run;if(d>mdd)mdd=d;}); base=base||store.settings.balance||100000; return base>0?mdd/base*100:0; }
 
 function renderRiskTab(a){
   const tb=document.querySelector('#riskTable tbody');
@@ -1307,23 +1409,13 @@ function makeBarChart(cv, labels, data, couleurs, fmtVal){
               y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675'}}}}});
 }
 
-// Détecte le magic du set live correspondant à un backtest, d'après son nom.
+/* Détecte le magic correspondant à un backtest, d'après le REGISTRE des 34 sets :
+   nom identique/inclus (normalisé), sinon alias distinctif (slot1, gold2hswing…). */
 function autoMagic(name){
-  const n=(name||'').toLowerCase();
-  if(/\bslot\s*1\b/.test(n)) return 23615;
-  if(/\bslot\s*2\b/.test(n)) return 15150;
-  if(/\bslot\s*3\b/.test(n)) return 36381;
-  if(/\bslot\s*4\b/.test(n)) return 27788;
-  if(/\bslot\s*5\b/.test(n)) return 44650;
-  if(/\bslot\s*6\b/.test(n)) return 20567;
-  if(/\bslot\s*8\b/.test(n)) return 33940;
-  if(/eurusd/.test(n)&&/swing/.test(n)) return 1;
-  if(/usdjpy/.test(n)&&/swing/.test(n)) return 2;
-  if(/gold\s*2h/.test(n)||/\b2000\b/.test(n)) return 3;
-  if(/gold\s*8h/.test(n)||/\b2001\b/.test(n)) return 4;
-  if(/sweep/.test(n)||/gold\s*london/.test(n)) return 5;
-  if(/gdaxi/.test(n)||/\bdax\b/.test(n)) return 6;
-  return null;
+  const k=normNom(name); if(!k) return null;
+  let hit=SETS_REGISTRY.find(r=>{ const rn=normNom(r.n); return rn===k || rn.includes(k) || k.includes(rn); });
+  if(!hit) hit=SETS_REGISTRY.find(r=> r.a && k.includes(r.a));
+  return hit ? hit.m : null;
 }
 /* ---------- publication / synchronisation des backtests ----------
    Les backtests naissent dans CE navigateur (les rapports HTML y sont analysés)
@@ -2013,6 +2105,20 @@ function conseilsPortefeuille(a){
     avis.push(['warn','Les coûts rongent le profit brut','Commissions + swaps représentent '+pct(c.partDuBrut,0)+' de ton profit brut ('+money(c.coutParLot||0)+'/lot). Au-delà de ~25 %, ça vaut une discussion avec ton broker (ou une comparaison) — c\'est le levier de performance le moins risqué qui existe.']);
   }
 
+  // --- rotation réel <-> démo (règles de l'onglet Compte démo) ---
+  try{
+    const plan=planRotation(a);   // `a` : lastA n'est posé qu'en fin de render()
+    const urg=plan.sortants.filter(s=>s.urgence);
+    if(urg.length){
+      avis.push(['danger','Urgence rotation : '+urg.length+' set(s) au-delà de 130 % de leur drawdown de référence',urg.map(s=>'« '+s.nom+' »').join(', ')+' — le cadre du backtest est largement dépassé. N\'attends pas la revue semestrielle : onglet « Compte démo », section Rotation.']);
+    } else if(plan.sortants.length||plan.entrants.length){
+      avis.push(['warn','Rotation à prévoir à la prochaine revue',plan.sortants.length+' candidat(s) à la désactivation, '+plan.entrants.length+' à la promotion. Détail dans l\'onglet « Compte démo » — on ne touche à rien avant la revue, sauf urgence.']);
+    }
+  }catch(e){}
+  const jRev=joursDepuis(store.revueDerniere);
+  if(jRev==null) avis.push(['info','Démarre le cycle de revue semestrielle','Aucune revue enregistrée. Onglet « Compte démo » : génère le premier rapport (ou « Marquer la revue comme faite ») pour lancer le cycle de 6 mois.']);
+  else if(jRev>=REVUE_JOURS) avis.push(['warn','Revue semestrielle due','La dernière revue date de '+jRev+' jours. Onglet « Compte démo » : génère le rapport et envoie-le sur Telegram.']);
+
   // --- rien à signaler ---
   if(!avis.some(x=>x[0]==='danger'||x[0]==='warn')){
     avis.push(['ok','Rien à corriger : laisse le système travailler','Tout est dans les clous. Le meilleur geste de gestion est maintenant l\'inaction : risque constant à '+riskTxt()+', pas d\'ajout ni de retrait de set sur une impression, et un point hebdomadaire sur cet onglet suffit. Le backtest te sert de contrat : tant que le réel le respecte, on ne renégocie pas.']);
@@ -2210,6 +2316,268 @@ function renderCtrlProjection(a){
   tag.className='tag '+risque;
 }
 
+/* ================= COMPTE DÉMO : banc d'essai, rotation, revue semestrielle ====
+   Le fichier démo a le MÊME schéma que le réel : on réutilise analyze(),
+   divergenceSet(), silenceSet() et les backtests comme références. */
+const btByMagic = m => store.backtests.find(b=>String(btMagic(b))===String(m)) || null;
+const REVUE_JOURS = 182;    // ~6 mois
+function joursDepuis(iso){ if(!iso) return null; const d=new Date(iso+'T12:00:00'); return isNaN(d)?null:Math.max(0, Math.floor((Date.now()-d.getTime())/86400000)); }
+
+function ingestDemo(data){
+  lastDemo=data;
+  try{ lastADemo=analyze(data); }catch(e){ console.error(e); lastADemo=null; }
+  renderDemo();
+}
+async function fetchDemo(){
+  try{
+    const r=await fetch(DEMO_ENDPOINT+'?t='+Date.now(),{cache:'no-store'});
+    if(!r.ok) throw 0;
+    ingestDemo(await r.json());
+  }catch(e){ renderDemo(); }   // fichier absent = normal tant que le VPS ne le pousse pas
+}
+
+/* ---------- plan de rotation (règles validées par l'utilisateur) ----------
+   SORTANT (réel)  : ≥20 trades ET drawdown live > 110 % du DD backtest.
+                     > 130 % = URGENCE, à traiter sans attendre la revue.
+   ENTRANT (démo)  : ≥20 trades, verdict « conforme » vs son backtest, DD démo
+                     ≤ 110 % de la référence, corrélation max avec les sets réels
+                     < 0,3 (grade A) ou < 0,6 (grade B, faute de mieux) — mesurée
+                     sur les P&L QUOTIDIENS des backtests (6 ans de données). */
+function planRotation(aOverride){
+  const a=aOverride||lastA, aD=lastADemo;
+  const reels=regParStatut('reel'), demos=regParStatut('demo');
+  const btsReels=reels.map(x=>btByMagic(x.m)).filter(Boolean);
+  const sortants=[], entrants=[];
+  if(a&&a.groups) reels.forEach(r=>{
+    const b=btByMagic(r.m); if(!b) return;
+    const g=a.groups['magic:'+r.m];
+    const n=g?g.closed.filter(t=>t.closeTime).length:0;
+    if(n<20) return;
+    const dd=setDD(g, a.dep), ref=(b.stats||{}).maxDDpct||0;
+    if(ref>0 && dd>ref*1.10) sortants.push({m:r.m, nom:r.n, dd, ref, n, urgence: dd>ref*1.30});
+  });
+  // matrice de corrélation calculée UNE fois (candidats + sets réels)
+  const btsDemo=demos.map(x=>({r:x, b:btByMagic(x.m)})).filter(x=>x.b);
+  const tous=[...new Set(btsDemo.map(x=>x.b).concat(btsReels))];
+  const M = tous.length>1 ? btCorrCompute(tous).M : null;
+  if(aD&&aD.groups) btsDemo.forEach(({r,b})=>{
+    const g=aD.groups['magic:'+r.m];
+    const n=g?g.closed.filter(t=>t.closeTime).length:0;
+    if(n<20) return;
+    const d=divergenceSet(b,g,aD);
+    if(d.statut!=='conforme') return;
+    const dd=setDD(g, aD.dep), ref=(b.stats||{}).maxDDpct||0;
+    if(ref>0 && dd>ref*1.10) return;
+    let corrMax=null;
+    if(M && M[b.id]) btsReels.forEach(rb=>{ const c=(M[b.id][rb.id]||{}).c; if(c!=null && (corrMax==null||c>corrMax)) corrMax=c; });
+    if(corrMax!=null && corrMax>=0.6) return;
+    entrants.push({m:r.m, nom:r.n, n, dd, ref, corrMax, grade:(corrMax==null||corrMax<0.3)?'A':'B'});
+  });
+  entrants.sort((x,y)=> x.grade!==y.grade ? (x.grade<y.grade?-1:1) : ((x.corrMax==null?1:x.corrMax)-(y.corrMax==null?1:y.corrMax)));
+  const placesLibres=Math.max(0, REEL_MAX - reels.length + sortants.length);
+  return {sortants, entrants, placesLibres, nReel:reels.length, nDemo:demos.length};
+}
+
+/* ---------- rendus de l'onglet Compte démo ---------- */
+function renderDemo(){
+  const sync=document.getElementById('demoSyncTxt'); if(!sync) return;
+  if(!lastDemo) sync.innerHTML='Fichier démo pas encore reçu (« '+DEMO_ENDPOINT+' »). En ligne : le VPS doit pousser <b>demo.json</b> ; en local : route <b>/demo</b> du serveur. En attendant, tu peux';
+  else sync.innerHTML='Compte démo <b>'+(lastDemo.account||'?')+'</b> · données du <b>'+(lastDemo.exportedAt||'?')+'</b> · '+((lastDemo.trades||[]).length)+' trade(s) exporté(s). Pour recharger à la main :';
+  renderDemoTable(); renderRotation(); renderRevue(); renderRegistre();
+}
+
+function renderDemoTable(){
+  const el=document.getElementById('demoTable'), tag=document.getElementById('demoEtatTag'), stats=document.getElementById('demoStats');
+  if(!el) return;
+  const aD=lastADemo;
+  const demos=regParStatut('demo');
+  if(stats){
+    stats.innerHTML = aD ? [
+      {lab:'Solde démo', val:money(aD.balance), sub:'équité '+money(aD.equity)},
+      {lab:'P&L réalisé', val:(aD.realized>=0?'+':'')+money(aD.realized), cls:aD.realized>=0?'pos':'neg', sub:pct(aD.retPct,2)+' du capital'},
+      {lab:'Trades clôturés', val:String(aD.closed.length), sub:aD.open.length+' position(s) ouverte(s)'},
+      {lab:'Sets en démo', val:String(demos.length), sub:'sur '+SETS_REGISTRY.length+' au registre'}
+    ].map(statHTML).join('') : '';
+  }
+  if(!aD){ el.innerHTML='<div class="empty">En attente des données démo.</div>'; tag.textContent='—'; tag.className='tag a'; return; }
+  const badge=s=>({diverge:'<span class="tag r">🔴 diverge</span>', surveiller:'<span class="tag a">🟡 à surveiller</span>',
+    conforme:'<span class="tag g">🟢 conforme</span>', jeune:'<span class="tag a">trop tôt</span>',
+    vide:'<span style="color:var(--dim)">aucun trade</span>'}[s]||'—');
+  let h='<div style="overflow:auto"><table style="font-size:12.5px"><thead><tr>'
+    +'<th>Set</th><th>Trades</th><th>P&L</th><th>Réussite réelle / att.</th><th>Trade moyen réel / att.</th><th>DD réel / réf</th><th>Dernier trade</th><th>Verdict</th>'
+    +'</tr></thead><tbody>';
+  let nConf=0, nDiv=0;
+  demos.forEach(r=>{
+    const b=btByMagic(r.m);
+    const court=r.n.length>30?r.n.slice(0,29)+'…':r.n;
+    h+='<tr><td title="'+r.n.replace(/"/g,'&quot;')+'">'+court+' <span style="color:var(--dim);font-size:10px">M'+r.m+'</span></td>';
+    if(!b){ h+='<td colspan="7" style="color:var(--dim)">backtest introuvable — importe-le ou renseigne son magic dans l\'onglet Backtests</td></tr>'; return; }
+    const g=lastADemo.groups['magic:'+r.m];
+    const d=divergenceSet(b,g,lastADemo);
+    const si=silenceSet(b,g);
+    const pl=g?g.pl:0;
+    if(d.statut==='conforme')nConf++; if(d.statut==='diverge')nDiv++;
+    const usd=v=>v==null?'—':money(v/100*(lastADemo.dep||100000));
+    h+='<td>'+(d.n||0)+'</td>';
+    if(d.statut==='vide'){ h+='<td colspan="4" style="color:var(--dim)">en attente du premier trade démo</td>'; }
+    else {
+      const dd=setDD(g,lastADemo.dep), ref=(b.stats||{}).maxDDpct||0, sur=ref>0&&dd>ref*1.10;
+      h+='<td class="'+(pl>=0?'pos':'neg')+'">'+(pl>=0?'+':'')+money(pl)+'</td>'
+        +'<td><b class="'+(d.obsWin>=d.attWin?'pos':'neg')+'">'+pct(d.obsWin,1)+'</b> / '+pct(d.attWin,1)+'</td>'
+        +'<td><b class="'+(d.sous?'neg':'pos')+'">'+usd(d.obsAvgPct)+'</b> / '+(d.attAvgPct==null?'—':usd(d.attAvgPct))+'</td>'
+        +'<td class="'+(sur?'neg':'')+'">'+pct(dd,2)+' / '+pct(ref,2)+'</td>';
+    }
+    h+='<td>'+(si.dernier?si.dernier.toLocaleDateString('fr-FR'):'—')
+      +(si.statut==='alarme'?' <span class="tag r">muet</span>':si.statut==='suspect'?' <span class="tag a">silence</span>':'')+'</td>'
+      +'<td>'+badge(d.statut)+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  el.innerHTML=h;
+  tag.textContent = nDiv? nDiv+' diverge(nt)' : nConf? nConf+' conforme(s)' : 'en observation';
+  tag.className='tag '+(nDiv?'r':nConf?'g':'a');
+}
+
+function renderRotation(){
+  const el=document.getElementById('demoRotation'), tag=document.getElementById('demoRotTag');
+  if(!el) return;
+  if(!lastA){ el.innerHTML='<div class="empty">Connecte le compte réel pour évaluer les rotations.</div>'; tag.textContent='—'; tag.className='tag a'; return; }
+  const plan=planRotation();
+  const urg=plan.sortants.filter(s=>s.urgence);
+  let h='';
+  if(!plan.sortants.length && !plan.entrants.length){
+    h='<div class="alert ok"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg><div><b>Aucune rotation à recommander.</b> Les '+plan.nReel+' sets réels restent dans leur cadre de drawdown, et aucun set démo ne remplit encore toutes les conditions de promotion.</div></div>';
+  } else {
+    if(plan.sortants.length){
+      h+='<h4 style="margin:0 0 8px;font-size:13px;color:var(--muted)">Candidats à la désactivation (réel → démo)</h4>';
+      plan.sortants.forEach(s=>{
+        h+='<div class="alert '+(s.urgence?'danger':'warn')+'"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>'
+          +'<div style="flex:1"><b>'+s.nom+'</b> — DD réel <b>'+pct(s.dd,2)+'</b> vs référence '+pct(s.ref,2)+' ('+fmt(s.dd/s.ref*100,0)+' %) · '+s.n+' trades. '
+          +(s.urgence?'<b>🔴 URGENCE (&gt; 130 %) : à traiter sans attendre la revue.</b>':'À trancher à la prochaine revue.')
+          +'</div><button class="ghost sm" data-rot-out="'+s.m+'" style="flex:none">J\'ai basculé en démo</button></div>';
+      });
+    }
+    if(plan.entrants.length){
+      h+='<h4 style="margin:12px 0 8px;font-size:13px;color:var(--muted)">Candidats à la promotion (démo → réel) · '+plan.placesLibres+' place(s)</h4>';
+      plan.entrants.forEach((e2,i)=>{
+        const ok=i<plan.placesLibres;
+        h+='<div class="alert '+(ok?'ok':'info')+'"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>'
+          +'<div style="flex:1"><b>'+e2.nom+'</b> — conforme sur '+e2.n+' trades · DD '+pct(e2.dd,2)+' (réf '+pct(e2.ref,2)+') · corrélation max '+(e2.corrMax==null?'—':fmt(e2.corrMax,2))+' <span class="tag '+(e2.grade==='A'?'g':'a')+'">grade '+e2.grade+(e2.grade==='B'?' (0,3-0,6 : faute de mieux)':'')+'</span>'
+          +(ok?'':' — en attente d\'une place')
+          +'</div>'+(ok?'<button class="ghost sm" data-rot-in="'+e2.m+'" style="flex:none">J\'ai promu en réel</button>':'')+'</div>';
+      });
+    }
+    h+='<div class="help" style="margin-top:6px">Les boutons ne font que <b>déclarer</b> la bascule dans le registre : l\'activation/désactivation réelle des EA se fait dans MT5 (réel ET démo).</div>';
+  }
+  el.innerHTML=h;
+  el.querySelectorAll('[data-rot-out]').forEach(btn=>btn.addEventListener('click',e=>{
+    const m=e.target.dataset.rotOut;
+    regBascule(m,'demo','désactivé du réel : DD > 110 % de la référence');
+    renderDemo();
+  }));
+  el.querySelectorAll('[data-rot-in]').forEach(btn=>btn.addEventListener('click',e=>{
+    const m=e.target.dataset.rotIn;
+    if(regParStatut('reel').length>=REEL_MAX){ alert('Déjà '+REEL_MAX+' sets en réel : désactive d\'abord un set.'); return; }
+    regBascule(m,'reel','promu depuis la démo (conforme + décorrélé)');
+    renderDemo();
+  }));
+  tag.textContent = urg.length ? 'URGENCE' : (plan.sortants.length||plan.entrants.length) ? 'à trancher à la revue' : 'rien à changer';
+  tag.className='tag '+(urg.length?'r':(plan.sortants.length||plan.entrants.length)?'a':'g');
+}
+
+/* ---------- revue semestrielle + Telegram ---------- */
+function rapportSemestrielTexte(){
+  const L=[], plan=lastA?planRotation():null;
+  const em=s=>({conforme:'✅',surveiller:'🟡',diverge:'🔴',jeune:'⏳',vide:'▫️'}[s]||'▫️');
+  L.push('📊 REVUE SEMESTRIELLE — Cockpit Darwinex Zero');
+  L.push(new Date().toLocaleDateString('fr-FR')+' · risque 0,5 %/trade · max '+REEL_MAX+' sets en réel');
+  L.push('');
+  const bloc=(titre, a2, sets)=>{
+    L.push(titre);
+    if(!a2){ L.push('  (données indisponibles)'); return; }
+    L.push('  Solde '+fmt(a2.balance,0)+' $ · P&L '+(a2.realized>=0?'+':'')+fmt(a2.realized,0)+' $ ('+fmt(a2.retPct,2)+' %) · DD max '+fmt(a2.maxDDpct,2)+' %');
+    sets.forEach(r=>{
+      const b=btByMagic(r.m);
+      if(!b){ L.push('  ▫️ M'+r.m+' '+r.n+' — backtest manquant'); return; }
+      const g=a2.groups['magic:'+r.m], d=divergenceSet(b,g,a2);
+      const dd=g?setDD(g,a2.dep):0, ref=(b.stats||{}).maxDDpct||0;
+      L.push('  '+em(d.statut)+' M'+r.m+' '+r.n+' — '+(d.n||0)+' trades, '+(g&&g.pl>=0?'+':'')+fmt(g?g.pl:0,0)+' $, DD '+fmt(dd,1)+' % (réf '+fmt(ref,1)+' %)');
+    });
+  };
+  bloc('— RÉEL ('+regParStatut('reel').length+' sets) —', lastA, regParStatut('reel'));
+  L.push('');
+  bloc('— DÉMO ('+regParStatut('demo').length+' sets) —', lastADemo, regParStatut('demo'));
+  L.push('');
+  L.push('— ROTATION RECOMMANDÉE —');
+  if(plan && (plan.sortants.length||plan.entrants.length)){
+    plan.sortants.forEach(s=>L.push('  ⬇️ Désactiver '+s.nom+' (DD '+fmt(s.dd,1)+' % = '+fmt(s.dd/s.ref*100,0)+' % de la réf'+(s.urgence?' — URGENCE':'')+')'));
+    plan.entrants.slice(0,plan.placesLibres||undefined).forEach(e2=>L.push('  ⬆️ Promouvoir '+e2.nom+' (conforme, corr max '+(e2.corrMax==null?'—':fmt(e2.corrMax,2))+', grade '+e2.grade+')'));
+    if(!plan.placesLibres && plan.entrants.length) L.push('  (entrants en attente : aucune place libre)');
+  } else L.push('  Aucune : on ne touche à rien.');
+  const dern=store.revueDerniere;
+  const rots=(store.rotations||[]).filter(r=>!dern||r.date>dern);
+  L.push('');
+  L.push('— Bascules déclarées depuis la dernière revue —');
+  if(rots.length) rots.forEach(r=>L.push('  '+r.date+' : M'+r.magic+' → '+r.vers+(r.motif?' ('+r.motif+')':'')));
+  else L.push('  Aucune.');
+  L.push('');
+  L.push('Estimations indicatives — pas un conseil en investissement.');
+  return L.join('\n');
+}
+async function tgEnvoyer(texte){
+  const tk=(store.tg||{}).token, ch=(store.tg||{}).chat;
+  if(!tk||!ch) throw new Error('Renseigne le token du bot et le chat ID.');
+  const parts=[]; for(let i=0;i<texte.length;i+=3500) parts.push(texte.slice(i,i+3500));
+  for(const p of parts){
+    const r=await fetch('https://api.telegram.org/bot'+tk+'/sendMessage',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({chat_id:ch, text:p})
+    });
+    const o=await r.json().catch(()=>({ok:false}));
+    if(!o.ok) throw new Error(o.description||('HTTP '+r.status));
+  }
+}
+function renderRevue(){
+  const etat=document.getElementById('demoRevueEtat'), tag=document.getElementById('demoRevueTag');
+  if(!etat) return;
+  const tk=document.getElementById('tgToken'), ch=document.getElementById('tgChat');
+  if(tk && document.activeElement!==tk) tk.value=(store.tg||{}).token||'';
+  if(ch && document.activeElement!==ch) ch.value=(store.tg||{}).chat||'';
+  const j=joursDepuis(store.revueDerniere);
+  if(j==null){
+    etat.innerHTML='Aucune revue enregistrée. Fais la première (ou « Marquer la revue comme faite ») pour démarrer le cycle de '+REVUE_JOURS+' jours.';
+    tag.textContent='à initialiser'; tag.className='tag a';
+  } else if(j>=REVUE_JOURS){
+    etat.innerHTML='<b style="color:var(--red)">Revue due</b> : la dernière date du '+new Date(store.revueDerniere+'T12:00:00').toLocaleDateString('fr-FR')+' ('+j+' jours).';
+    tag.textContent='due'; tag.className='tag r';
+  } else {
+    etat.innerHTML='Dernière revue le '+new Date(store.revueDerniere+'T12:00:00').toLocaleDateString('fr-FR')+' · prochaine dans <b>'+(REVUE_JOURS-j)+'</b> jour(s).';
+    tag.textContent=(REVUE_JOURS-j)+' j restants'; tag.className='tag g';
+  }
+}
+function renderRegistre(){
+  const el=document.getElementById('demoRegistre'); if(!el) return;
+  const nReel=regParStatut('reel').length;
+  let h='<div class="help" style="margin-bottom:8px">'+nReel+'/'+REEL_MAX+' sets en réel · '+regParStatut('demo').length+' en démo · '+regParStatut('off').length+' désactivé(s).</div>'
+    +'<div style="overflow:auto"><table style="font-size:12px"><thead><tr><th>Magic</th><th>Set</th><th>Statut</th><th>Depuis</th></tr></thead><tbody>';
+  SETS_REGISTRY.forEach(r=>{
+    const st=regStatut(r.m);
+    h+='<tr><td>'+r.m+'</td><td>'+r.n+'</td>'
+      +'<td><select data-reg="'+r.m+'" style="width:auto;padding:4px 8px">'
+      +['reel','demo','off'].map(s=>'<option value="'+s+'"'+(s===st?' selected':'')+'>'+({reel:'Réel',demo:'Démo',off:'Désactivé'}[s])+'</option>').join('')
+      +'</select></td><td>'+(regDepuis(r.m)||'—')+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  el.innerHTML=h;
+  el.querySelectorAll('[data-reg]').forEach(sel=>sel.addEventListener('change',e=>{
+    const m=e.target.dataset.reg, v=e.target.value;
+    if(v==='reel' && regStatut(m)!=='reel' && regParStatut('reel').length>=REEL_MAX){
+      alert('Déjà '+REEL_MAX+' sets en réel : désactive d\'abord un set.'); renderRegistre(); return;
+    }
+    regBascule(m, v, 'changement manuel dans le registre');
+    renderDemo();
+  }));
+}
+
 /* ---------- #2 fraîcheur des données ---------- */
 function dataAgeMin(){
   if(!lastData) return null;
@@ -2384,7 +2752,8 @@ document.getElementById('btnRefresh').addEventListener('click',()=>{ if(SERVER_M
     document.getElementById('btnConnect').style.display='none';
     setConn(false,'Connexion au serveur…');
     await fetchData();
-    startPolling(fetchData);
+    fetchDemo();
+    startPolling(()=>{ fetchData(); fetchDemo(); });
   } else {
     // opened as a local file: use the File System Access API (Chrome / Edge)
     try{
@@ -2463,6 +2832,42 @@ document.getElementById('tabs').addEventListener('click',e=>{
     if(!confirm('Effacer les '+store.backtests.length+' backtest(s) importé(s) et remettre les graphes à zéro ?')) return;
     store.backtests=[]; saveStore(store); renderBacktests(lastA);
   });
+
+  /* ---- onglet Compte démo ---- */
+  const dFile=document.getElementById('demoFile');
+  if(dFile) dFile.addEventListener('change',e=>{
+    const f=e.target.files[0]; if(!f) return;
+    f.text().then(t=>{ try{ ingestDemo(JSON.parse(t.replace(/^﻿/,''))); }catch(err){ alert('Fichier démo illisible : '+err.message); } });
+    e.target.value='';
+  });
+  const sauveTg=()=>{ store.tg={ token:(document.getElementById('tgToken')||{}).value||'', chat:(document.getElementById('tgChat')||{}).value||'' }; saveStore(store); };
+  ['tgToken','tgChat'].forEach(id=>{ const el2=document.getElementById(id); if(el2) el2.addEventListener('change',sauveTg); });
+  const rGen=document.getElementById('revueGen');
+  if(rGen) rGen.addEventListener('click',()=>{
+    const ta=document.getElementById('revueTexte');
+    ta.value=rapportSemestrielTexte(); ta.style.display='block';
+    document.getElementById('revueSend').style.display='inline-flex';
+    document.getElementById('revueMsg').textContent='Relis le rapport (modifiable), puis envoie-le. La date de revue sera enregistrée après l\'envoi.';
+  });
+  const rSend=document.getElementById('revueSend');
+  if(rSend) rSend.addEventListener('click',async()=>{
+    sauveTg();
+    const msg=document.getElementById('revueMsg');
+    msg.textContent='Envoi en cours…';
+    try{
+      await tgEnvoyer(document.getElementById('revueTexte').value);
+      store.revueDerniere=new Date().toISOString().slice(0,10); saveStore(store);
+      msg.innerHTML='✅ <b>Rapport envoyé sur Telegram.</b> Revue enregistrée au '+new Date().toLocaleDateString('fr-FR')+'.';
+      renderRevue();
+    }catch(err){ msg.innerHTML='❌ Échec de l\'envoi : '+err.message; }
+  });
+  const rMark=document.getElementById('revueMark');
+  if(rMark) rMark.addEventListener('click',()=>{
+    store.revueDerniere=new Date().toISOString().slice(0,10); saveStore(store);
+    document.getElementById('revueMsg').textContent='Revue enregistrée au '+new Date().toLocaleDateString('fr-FR')+' (sans envoi).';
+    renderRevue();
+  });
+  renderDemo();
 })();
 
 /* render once with placeholder if no data yet (shows empty states) */
