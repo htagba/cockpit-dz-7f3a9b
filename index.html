@@ -1909,17 +1909,24 @@ function btRefSet(b){
     joursParTrade: (n && spanJours>0) ? spanJours/n : null };
 }
 
+/* Seuils minimaux de trades avant de rendre un verdict : on ne juge pas un set sur
+   du bruit. Actuellement 20 partout (réel ET démo). MIN_TRADES_DEMO est laissé
+   séparé pour pouvoir abaisser le banc d'essai (ex. 10) sans toucher au réel. */
+const MIN_TRADES_REEL = 20;
+const MIN_TRADES_DEMO = 20;
+
 /* ---------- 1. divergence live vs backtest ----------
    Deux tests : z sur le taux de réussite (proportion), t sur l'espérance par trade.
-   Le verdict retient le plus sévère. En dessous de 20 trades on ne tranche pas :
-   un écart de win rate sur 8 trades ne veut rien dire. */
-function divergenceSet(b, g, a){
+   Le verdict retient le plus sévère. En dessous de `minN` trades on ne tranche pas :
+   un écart de win rate sur quelques trades ne veut rien dire. */
+function divergenceSet(b, g, a, minN){
+  minN = minN || MIN_TRADES_REEL;
   const ref=btRefSet(b);
   const attWin=ref.winRate;              // taux de réussite du backtest complet
   const attAvgPct=ref.avgTradePct;       // % par trade, mesuré dans le rapport au risque live
   const cl=((g&&g.closed)||[]).filter(t=>t.closeTime);
   const n=cl.length;
-  if(!n) return {n:0, attWin, attAvgPct, refN:ref.refN, statut:'vide'};
+  if(!n) return {n:0, attWin, attAvgPct, refN:ref.refN, minN, statut:'vide'};
   const dep=a.dep||100000;
   const obsWin=cl.filter(t=>t.profit>0).length/n*100;
   const rs=cl.map(t=>t.profit/dep*100);
@@ -1935,14 +1942,14 @@ function divergenceSet(b, g, a){
   const nNec=(d>0.005&&p0>0&&p0<1)?Math.ceil(3.8416*p0*(1-p0)/(d*d)):null;
   const pire=Math.max(Math.abs(z),Math.abs(t));
   let statut;
-  if(n<20) statut='jeune';
+  if(n<minN) statut='jeune';
   else if(pire<1.5) statut='conforme';
   else if(pire<2.5) statut='surveiller';
   else statut='diverge';
   // Ce qui déclenche le verdict : l'espérance ou le taux de réussite. Sert à
   // n'afficher « X trades pour trancher » que quand c'est bien la réussite qui parle.
   const cause = Math.abs(t)>=Math.abs(z) ? 'espérance' : 'réussite';
-  return {n, attWin, attAvgPct, refN:ref.refN, obsWin, obsAvgPct:moy,
+  return {n, attWin, attAvgPct, refN:ref.refN, minN, obsWin, obsAvgPct:moy,
           z, t, nNec, statut, cause, sous:(attAvgPct!=null && moy<attAvgPct)};
 }
 
@@ -2177,7 +2184,7 @@ function renderCtrlDivergence(a){
         +'<td>'+(d.refN?d.refN+' trades':'<span style="color:var(--dim)">absent</span>')+'</td>';
     }
     let sous='';
-    if(d.statut==='jeune') sous=d.n+'/20 trades';
+    if(d.statut==='jeune') sous=d.n+'/'+(d.minN||20)+' trades';
     else if(d.statut==='diverge') sous='sur l\''+d.cause;
     else if(d.statut==='surveiller') sous='sur l\''+d.cause
       +((d.cause==='réussite'&&d.nNec&&d.nNec>d.n)?' · ~'+d.nNec.toLocaleString('fr-FR')+' trades pour trancher':'');
@@ -2366,8 +2373,8 @@ function planRotation(aOverride){
   if(aD&&aD.groups) btsDemo.forEach(({r,b})=>{
     const g=aD.groups['magic:'+r.m];
     const n=g?g.closed.filter(t=>t.closeTime).length:0;
-    if(n<20) return;
-    const d=divergenceSet(b,g,aD);
+    if(n<MIN_TRADES_DEMO) return;
+    const d=divergenceSet(b,g,aD,MIN_TRADES_DEMO);
     if(d.statut!=='conforme') return;
     const dd=setDD(g, aD.dep), ref=(b.stats||{}).maxDDpct||0;
     if(ref>0 && dd>ref*1.10) return;
@@ -2416,7 +2423,7 @@ function renderDemoTable(){
     h+='<tr><td title="'+r.n.replace(/"/g,'&quot;')+'">'+court+' <span style="color:var(--dim);font-size:10px">M'+r.m+'</span></td>';
     if(!b){ h+='<td colspan="7" style="color:var(--dim)">backtest introuvable — importe-le ou renseigne son magic dans l\'onglet Backtests</td></tr>'; return; }
     const g=lastADemo.groups['magic:'+r.m];
-    const d=divergenceSet(b,g,lastADemo);
+    const d=divergenceSet(b,g,lastADemo,MIN_TRADES_DEMO);
     const si=silenceSet(b,g);
     const pl=g?g.pl:0;
     if(d.statut==='conforme')nConf++; if(d.statut==='diverge')nDiv++;
@@ -2494,21 +2501,21 @@ function rapportSemestrielTexte(){
   L.push('📊 REVUE SEMESTRIELLE — Cockpit Darwinex Zero');
   L.push(new Date().toLocaleDateString('fr-FR')+' · risque 0,5 %/trade · max '+REEL_MAX+' sets en réel');
   L.push('');
-  const bloc=(titre, a2, sets)=>{
+  const bloc=(titre, a2, sets, minN)=>{
     L.push(titre);
     if(!a2){ L.push('  (données indisponibles)'); return; }
     L.push('  Solde '+fmt(a2.balance,0)+' $ · P&L '+(a2.realized>=0?'+':'')+fmt(a2.realized,0)+' $ ('+fmt(a2.retPct,2)+' %) · DD max '+fmt(a2.maxDDpct,2)+' %');
     sets.forEach(r=>{
       const b=btByMagic(r.m);
       if(!b){ L.push('  ▫️ M'+r.m+' '+r.n+' — backtest manquant'); return; }
-      const g=a2.groups['magic:'+r.m], d=divergenceSet(b,g,a2);
+      const g=a2.groups['magic:'+r.m], d=divergenceSet(b,g,a2,minN);
       const dd=g?setDD(g,a2.dep):0, ref=(b.stats||{}).maxDDpct||0;
       L.push('  '+em(d.statut)+' M'+r.m+' '+r.n+' — '+(d.n||0)+' trades, '+(g&&g.pl>=0?'+':'')+fmt(g?g.pl:0,0)+' $, DD '+fmt(dd,1)+' % (réf '+fmt(ref,1)+' %)');
     });
   };
-  bloc('— RÉEL ('+regParStatut('reel').length+' sets) —', lastA, regParStatut('reel'));
+  bloc('— RÉEL ('+regParStatut('reel').length+' sets) —', lastA, regParStatut('reel'), MIN_TRADES_REEL);
   L.push('');
-  bloc('— DÉMO ('+regParStatut('demo').length+' sets) —', lastADemo, regParStatut('demo'));
+  bloc('— DÉMO ('+regParStatut('demo').length+' sets) —', lastADemo, regParStatut('demo'), MIN_TRADES_DEMO);
   L.push('');
   L.push('— ROTATION RECOMMANDÉE —');
   if(plan && (plan.sortants.length||plan.entrants.length)){
