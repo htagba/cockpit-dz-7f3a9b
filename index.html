@@ -1491,7 +1491,11 @@ function autoMagic(name){
 
 function btPaquet(){
   if(!store.backtests || !store.backtests.length) throw new Error('aucun backtest à publier');
-  return { publieLe:new Date().toISOString(), nb:store.backtests.length, backtests:store.backtests };
+  return { publieLe:new Date().toISOString(), nb:store.backtests.length,
+    // Réglages de risque de l'app : le veilleur/rapport les liront ici comme
+    // source de vérité (une seule saisie, dans l'app). Voir apply_reglages().
+    reglages:{ riskPct:riskCible(), ddWarn:Number(store.settings.ddWarn)||6, ddMax:Number(store.settings.ddMax)||10 },
+    backtests:store.backtests };
 }
 
 function btPublier(){
