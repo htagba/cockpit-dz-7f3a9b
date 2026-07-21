@@ -598,8 +598,8 @@ function loadStore(){ try{return JSON.parse(localStorage.getItem(LS))||{}}catch(
 function saveStore(s){ localStorage.setItem(LS,JSON.stringify(s)); }
 let store = Object.assign({setNames:{}, equitySnaps:[], settings:{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10}}, loadStore());
 store.setNames=store.setNames||{}; store.equitySnaps=store.equitySnaps||[]; store.settings=store.settings||{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10};
-/* ================= REGISTRE DES 34 SETS (source : « Tous les sets.xlsx ») =====
-   Statut par défaut : 1-5 & 11-26 = RÉEL · 6-10 = désactivés · 27-34 = DÉMO (banc
+/* ================= REGISTRE DES 35 SETS (source : « Tous les sets.xlsx ») =====
+   Statut par défaut : 1-5, 11-26 & 35 = RÉEL · 6-10 = désactivés · 27-34 = DÉMO (banc
    d'essai des remplaçants). `a` = alias de reconnaissance pour apparier les noms
    de rapports de backtest qui ne reprennent pas le libellé exact du registre. */
 const SETS_REGISTRY = [
@@ -636,18 +636,19 @@ const SETS_REGISTRY = [
   {m:31, n:"Dolt MultiStrategy - Slot 5 - SP500 M15",    a:"slot5"},
   {m:32, n:"Dolt MultiStrategy - Slot 6 - XAUUSD M15",   a:"slot6"},
   {m:33, n:"Dolt MultiStrategy - Slot 7 - XAUUSD H1 - A",a:"slot7"},
-  {m:34, n:"Dolt MultiStrategy - Slot 8 - XAUUSD H1 - B",a:"slot8"}
+  {m:34, n:"Dolt MultiStrategy - Slot 8 - XAUUSD H1 - B",a:"slot8"},
+  {m:35, n:"APEX EA AUDUSD H1 7.0"}
 ];
-const REEL_MAX = 21;
+const REEL_MAX = 22;
 const normNom = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const regEntree = m => SETS_REGISTRY.find(r=>r.m===Number(m)) || null;
 const regNom = m => { const r=regEntree(m); return r ? r.n : ('Magic '+m); };
-/* Statut d'un set : 'reel' | 'demo' | 'off'. Défaut : 1-5 & 11-26 réel, 6-10 off, 27-34 démo.
+/* Statut d'un set : 'reel' | 'demo' | 'off'. Défaut : 1-5, 11-26 & 35 réel, 6-10 off, 27-34 démo.
    Les bascules (rotations) sont déclarées dans l'app et historisées. */
 function regStatut(m){ const o=(store.registre||{})[String(m)]; return o ? o.statut : statutDefaut(Number(m)); }
 /* Allocation par défaut du compte réel (juillet 2026) :
-   1-5 & 11-26 = réel · 6-10 = désactivés · 27-34 = démo. */
-function statutDefaut(m){ if(m>=27) return 'demo'; if(m>=11) return 'reel'; if(m>=6) return 'off'; return 'reel'; }
+   1-5, 11-26 & 35 = réel · 6-10 = désactivés · 27-34 = démo. */
+function statutDefaut(m){ if(m===35) return 'reel'; if(m>=27) return 'demo'; if(m>=11) return 'reel'; if(m>=6) return 'off'; return 'reel'; }
 function regDepuis(m){ const o=(store.registre||{})[String(m)]; return o ? o.depuis : null; }
 function regBascule(m, statut, motif){
   store.registre = store.registre || {};
