@@ -434,7 +434,7 @@
   <!-- CONTRÔLE LIVE -->
   <div class="view" id="v-controle">
     <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Ces quatre contrôles répondent à une seule question : <b>ton live tient-il la promesse du backtest ?</b> Ils s'appuient sur l'appariement <b>magic number → backtest</b> que tu renseignes dans l'onglet « Backtests ». Tant que l'échantillon est trop petit, l'app annonce le nombre de trades manquants au lieu d'un verdict — pour ne pas couper un EA sur du bruit.</div></div>
-    <div class="help" style="margin-bottom:4px"><b>D'où viennent les références ?</b> De <b>tes backtests</b>, générés à <b>0,1 % du solde par trade</b> — exactement le money management du live : aucune mise à l'échelle. Le rendement de chaque trade est mesuré sur le solde courant du backtest (gains composés), et la limite réelle de <b>10 lots</b> du compte est modélisée dans la projection.</div>
+    <div class="help" style="margin-bottom:4px"><b>D'où viennent les références ?</b> De <b>tes backtests</b>, générés à <b>0,1 % du solde par trade</b> — exactement le money management du live : aucune mise à l'échelle. Le rendement de chaque trade est mesuré sur le solde courant du backtest (gains composés), et la limite réelle de <b>20 lots</b> du compte est modélisée dans la projection.</div>
 
     <details class="card" data-sect="ctrlAvis" style="margin-top:14px" open>
       <summary><h3>Conseils de gestion du portefeuille <span class="tag a" id="ctrlAvisTag">—</span></h3></summary>
@@ -650,7 +650,7 @@ const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 
 /* ---------- risque ----------
    Backtests ET live sont au MÊME risque : 0,1 % du solde par trade (backtests
-   régénérés en juillet 2026, période 2020 -> aujourd'hui, limite réelle 10 lots).
+   régénérés en juillet 2026, période 2020 -> aujourd'hui, limite réelle 20 lots).
    Plus AUCUNE mise à l'échelle nulle part : les chiffres des rapports MT5
    importés se lisent tels quels. */
 const riskCible = () => Number(store.settings.riskPct) || 0.1;
@@ -1199,13 +1199,14 @@ function renderAnalyse(a){
 store.backtests = store.backtests || [];
 const round2=n=>Math.round(n*100)/100;
 
-/* ---------- limite réelle du compte : 10 lots max ----------
-   Limite confirmée sur le compte réel. Mesurée sur la simulation money management
-   à 0,1 % : elle commence à mordre vers ~800 000 $ de solde — au-delà, les
-   positions ne peuvent plus grossir et le rendement en % se dilue. Utilisée par
-   la projection du Contrôle live. */
-const CAP_LOTS = 10;
-const CAP_LOTS_SOLDE = 800000;
+/* ---------- limite réelle du compte : 20 lots max ----------
+   Limite confirmée sur le compte réel. Le solde à partir duquel elle commence à
+   mordre dépend du risque : calibré à 800 000 $ pour 10 lots @ 0,5 %/trade, il
+   varie ∝ (CAP_LOTS/10) × (0,5 / risque%). À 0,1 % et 20 lots ≈ 8 000 000 $. On
+   le recalcule selon le risque courant pour rester juste s'il change. Utilisé
+   par la projection du Contrôle live. */
+const CAP_LOTS = 20;
+const capLotsSolde = () => 800000 * (CAP_LOTS/10) * (0.5/riskCible());
 
 /* Grille « année × mois » en $ (vert/rouge), avec total annuel. `monthsObj` :
    { 'AAAA-MM': montant } ou { AAAA:[12 valeurs] }. */
@@ -1841,7 +1842,7 @@ function btExportPDF(){
       +'<td class="'+(s.rendementNet>=0?'p':'n')+'">'+pct(s.rendementNet,1)+'</td>'
       +'<td class="n">'+pct(s.maxDDpct,2)+'</td><td>'+(s.pf==null?'—':fmt(s.pf,2))+'</td>'
       +'<td>'+pct(s.winRate,1)+'</td><td>'+pct(s.moisPositifs,0)+'</td></tr>';}).join('')+'</tbody></table>');
-  H.push('<div class="note">Backtests générés à 0,1 % du solde par trade (2020 → aujourd\'hui) — le money management du compte réel (limite 10 lots). Estimations indicatives, pas une garantie de performance future ni un conseil en investissement.</div>');
+  H.push('<div class="note">Backtests générés à 0,1 % du solde par trade (2020 → aujourd\'hui) — le money management du compte réel (limite 20 lots). Estimations indicatives, pas une garantie de performance future ni un conseil en investissement.</div>');
   H.push('</body></html>');
   const w=window.open('', '_blank');
   if(!w){ alert('La fenêtre du rapport a été bloquée. Autorise les pop-ups pour ce site, puis réessaie.'); return; }
@@ -2017,7 +2018,7 @@ function btAttenduParTrade(a){
 
 /* Projection : tirage avec remise dans les rendements par trade de TOUS les
    backtests inclus (0,1 %, exactement comme le live — aucune mise à l'échelle).
-   La limite réelle de 10 lots est modélisée : au-delà de CAP_LOTS_SOLDE les
+   La limite réelle de 20 lots est modélisée : au-delà de capLotsSolde() les
    positions ne grossissent plus, le rendement en % se dilue. */
 function projectionLive(a, mois, nSim){
   const bts=store.backtests.filter(b=>b.included!==false);
@@ -2033,7 +2034,7 @@ function projectionLive(a, mois, nSim){
   if(R.length<50 || spanJours<=0) return null;
   const n=Math.max(1, Math.round(totTrades/spanJours*mois*30.44));
   const eq0=a.equity||a.balance||100000;
-  const cap=CAP_LOTS_SOLDE;
+  const cap=capLotsSolde();
   const ddMax=Number(store.settings.ddMax)||10;
   nSim=nSim||2000;
   const fins=new Float64Array(nSim); let nBreach=0, nPos=0, nCap=0;
@@ -2331,7 +2332,7 @@ function renderCtrlProjection(a){
   h+='</tbody></table></div>';
   tab.innerHTML=h;
   note.innerHTML='Chaque ligne rejoue '+p12.nSim.toLocaleString('fr-FR')+' fois le portefeuille en tirant au hasard, avec remise, dans les trades de <b>tes backtests à 0,1 %</b> — le même risque que le live, sans mise à l\'échelle. '
-    +'Le <b>plafond de 10 lots</b> est modélisé : au-delà de '+money0(p12.cap)+' de solde les positions ne grossissent plus, donc le rendement en % se dilue'
+    +'Le <b>plafond de 20 lots</b> est modélisé : au-delà de '+money0(p12.cap)+' de solde les positions ne grossissent plus, donc le rendement en % se dilue'
     +(p12.probCap>1?(' — cela arrive dans <b>'+pct(p12.probCap,0)+'</b> des tirages à 12 mois.'):' (pas encore atteint dans les tirages à 12 mois).')+' '
     +'<br>🔴 <b>Ne te fie pas à la probabilité de drawdown.</b> Le tirage traite les trades comme indépendants : il casse les séries de pertes, qui sont précisément ce qui creuse les drawdowns. Il les <b>sous-estime donc lourdement</b>. Le repère qui compte est l\'historique : le portefeuille backtesté (compte commun simulé) a connu <b>'+pct(ddHist,2)+'</b> de drawdown'
     +(ddHist>=p12.ddMax?' — soit <b class="neg">au-delà de ta limite de '+pct(p12.ddMax,0)+'</b>. Autrement dit, ce portefeuille a déjà dépassé ton seuil par le passé, quoi qu\'en dise la simulation.':', contre une limite fixée à '+pct(p12.ddMax,0)+'.')
