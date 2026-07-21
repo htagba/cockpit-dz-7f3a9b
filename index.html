@@ -553,7 +553,7 @@
     <div class="card" style="margin-top:16px">
       <h3>Courbe d'équité <span style="font-weight:400;color:var(--dim);font-size:11px">(P&amp;L cumulé)</span></h3>
       <canvas id="pfEquity" height="110"></canvas>
-      <div class="help" style="margin-top:8px">Reconstituée depuis la performance mensuelle du rapport (granularité mensuelle). Le drawdown réel du rapport, mesuré au trade, est de <b>1,73 %</b> (4&nbsp;935,68&nbsp;$).</div>
+      <div class="help" style="margin-top:8px">Reconstituée depuis la performance mensuelle du rapport (granularité mensuelle). Le drawdown réel du rapport, mesuré au trade, est de <b>1,89 %</b> (4&nbsp;566,63&nbsp;$).</div>
     </div>
 
     <div class="card" style="margin-top:14px">
@@ -2892,21 +2892,21 @@ function showDropzone(){
    2026, 0,1 %/trade (1 lot, plafond 20 lots). La courbe d'équité est
    reconstituée à partir de la performance mensuelle (granularité mensuelle). */
 const PF_REPORT = {
-  global:{ profit:247890.69, trades:8934, sharpe:0.12, pf:1.64, retDD:50.22, winPct:55.28,
-    ddDollar:4935.68, ddPct:1.73, dailyAvg:103.63, mthlyAvg:3137.86, yrlyAvg:37654.75, avgTrade:27.75,
-    yrlyPct:37.65, cagr:19.49, annualMaxDD:11.27, expectancyR:0.29, sqn:15.83 },
-  detail:{ winsLossRatio:1.24, payout:1.33, ahpr:0.01, zScore:-8.69, zProb:0, expectancy:27.75, deviation:165.71,
-    stagnationDays:50, stagnationPct:2.09, wins:4939, losses:3995, grossProfit:634024.78, grossLoss:-386134.09,
-    avgWin:128.37, avgLoss:-96.65, largestWin:2227.8, largestLoss:-1113.86, maxConsecWins:19, maxConsecLosses:11,
-    avgConsecWins:2.46, avgConsecLoss:1.99 },
+  global:{ profit:189347.21, trades:5734, sharpe:0.22, pf:1.78, retDD:41.46, winPct:59.99,
+    ddDollar:4566.63, ddPct:1.89, dailyAvg:79.16, mthlyAvg:2396.8, yrlyAvg:28760.7, avgTrade:33.02,
+    yrlyPct:28.76, cagr:16.39, annualMaxDD:8.67, expectancyR:0.31, sqn:14.78 },
+  detail:{ winsLossRatio:1.5, payout:1.19, ahpr:0.02, zScore:-8.5, zProb:0, expectancy:33.02, deviation:169.16,
+    stagnationDays:68, stagnationPct:2.84, wins:3440, losses:2294, grossProfit:430607.99, grossLoss:-241260.78,
+    avgWin:125.18, avgLoss:-105.17, largestWin:2227.8, largestLoss:-1113.86, maxConsecWins:19, maxConsecLosses:9,
+    avgConsecWins:2.81, avgConsecLoss:1.88 },
   monthly:{
-    2020:[1985.51,3232.8,12834.19,7050.22,-53.15,5046.39,2607.99,2023,2516.65,94.52,4301.28,1793.05],
-    2021:[381.82,2310,4108.26,1372.53,765.57,3295.99,2395.97,1735.82,3328.66,204.85,3265.5,1291.57],
-    2022:[2303.64,850.51,6937.8,5900.47,182.85,6219,6551.59,4413.88,5565.42,8072.11,5450.46,1807.32],
-    2023:[3274.01,3940.28,3488.2,2068.3,2753.04,1647.18,1903.96,2497.77,2748.55,2253.01,1172.3,-1723.16],
-    2024:[2433.51,1930.92,2093.68,3032.42,3961.71,1688.37,1560.11,4271.3,1545.23,4203.05,2293.76,4159.31],
-    2025:[4096.41,-1519.18,2582.42,6954.41,5814.58,2420.7,2544.66,1395.35,4092.12,2808.84,4782.42,4225.84],
-    2026:[5292.84,6798.23,5502.13,6484.85,1063.05,1722.7,-512.53]
+    2020:[1304.38,2295.86,9800.65,5694.75,147.58,4780.8,2181.56,1879.03,2171.17,440.83,2813.21,1418.56],
+    2021:[-440.59,1926.58,3214.9,1607.6,555.7,3585.34,1034.26,1665.14,2977.88,-489.43,2463.03,369.63],
+    2022:[1497.49,181.23,5160.06,5718.12,113.58,3215.98,4708.22,3468.24,4169.79,4955.95,5173.72,1442.53],
+    2023:[2144.11,3546.54,3781.43,1338.88,1680.56,1724.06,1237.21,989.37,2611.28,1901.13,736.45,-135.27],
+    2024:[296.79,1470.29,620.97,2031.24,3646.52,1356.91,891.15,4284.89,3180.09,2085.91,607.49,2275.15],
+    2025:[3936.1,-1896.11,3743.04,3938.05,2303.98,2118.83,1173.73,889.84,900.63,3026.47,2885,3327.5],
+    2026:[4822.7,6138.76,4994.85,7250.8,258.72,1473.9,553.94]
   }
 };
 function renderPortfolio(){
