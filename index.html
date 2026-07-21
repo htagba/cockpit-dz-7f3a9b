@@ -1399,7 +1399,7 @@ function btImportFile(file){
       if(!tr||!tr.trades.length){ alert('Aucune table de trades reconnue dans « '+file.name+' ». Vérifie que c\'est bien un rapport MT5.'); return; }
       const c=btCompute(tr.trades, sum.deposit||tr.deposit);
       const sig=c.nbTrades+'|'+Math.round(c.net)+'|'+(c.days[0]?c.days[0][0]:'');
-      const entry={ id:'bt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), name:(file.name.replace(/\.html?$/i,'')||sum.symbol||tr.symbol), sig, deposit:c.deposit, riskPct:1, included:true, symbol:sum.symbol||tr.symbol||'', period:sum.period||'', days:c.days, positions:c.positions, deals:c.deals, rt:c.rt, stats:{net:c.net,pf:c.pf,winRate:c.winRate,maxDDpct:c.maxDDpct,nbTrades:c.nbTrades,months:c.months,moisPositifs:c.moisPositifs,rendementNet:c.rendementNet} };
+      const entry={ id:'bt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), name:(file.name.replace(/\.html?$/i,'')||sum.symbol||tr.symbol), sig, deposit:c.deposit, included:true, symbol:sum.symbol||tr.symbol||'', period:sum.period||'', days:c.days, positions:c.positions, deals:c.deals, rt:c.rt, stats:{net:c.net,pf:c.pf,winRate:c.winRate,maxDDpct:c.maxDDpct,nbTrades:c.nbTrades,months:c.months,moisPositifs:c.moisPositifs,rendementNet:c.rendementNet} };
       const ix=store.backtests.findIndex(b=>b.sig&&b.sig===sig);
       if(ix>=0){ entry.included=store.backtests[ix].included; store.backtests[ix]=entry; }  // ré-import : remplace, pas de doublon
       else store.backtests.push(entry);
@@ -2626,7 +2626,9 @@ function renderHeat(a){
   const bar=document.getElementById('heatBar'), txt=document.getElementById('heatTxt'), help=document.getElementById('heatHelp');
   if(!bar)return;
   const open=a.open||[];
-  const nSets=Object.keys(store.setNames).filter(k=>k.indexOf('magic:')===0).length||13;
+  // Capacité = sets ACTIFS EN RÉEL uniquement (eux seuls tradent le compte live),
+  // pas le nombre total de sets nommés dans le registre.
+  const nSets=regParStatut('reel').length;
   const maxHeat=Math.max(riskCible()*nSets, 1.3);
   if(!open.length){ bar.style.width='0%'; bar.style.background='var(--green)'; txt.textContent='0,00 % · aucune position ouverte'; if(help)help.textContent='Aucune position ouverte exportée. (Nécessite un EA exportateur qui liste aussi les positions ouvertes.)'; return; }
   let sum=0, unknown=0;
