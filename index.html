@@ -2662,7 +2662,11 @@ function dataAgeMin(){
 }
 function renderStale(){
   const banner=document.getElementById('staleBanner'); if(!banner)return;
-  const age=dataAgeMin(); const threshold=store.settings.staleMin||15;
+  /* Seuil 25 min : l'empilement normal des délais peut atteindre ~20 min
+     (EA écrit /5 min + tâche VPS /5 min + cache CDN GitHub Pages max-age=600).
+     En dessous, la bannière crierait au loup sur une chaîne saine. La vraie
+     sentinelle de panne reste le veilleur Telegram (45 min). */
+  const age=dataAgeMin(); const threshold=store.settings.staleMin||25;
   if(age==null || age<=threshold){ banner.style.display='none'; return; }
   banner.style.display='';
   document.getElementById('staleMsg').innerHTML='<b>Données figées.</b> Le fichier MT5 n\'a pas bougé depuis <b>'+Math.round(age)+' min</b> — vérifie que MT5, l\'EA exportateur et le VPS tournent.';
