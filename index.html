@@ -570,7 +570,7 @@
 
   <div class="foot">
     Cockpit Darwinex Zero · application locale, tes données ne quittent jamais ton ordinateur.<br>
-    Lance « Lancer-Cockpit.bat » : lecture auto du fichier MT5 toutes les 5 min, sur tous les navigateurs. Estimations indicatives, pas un conseil en investissement.
+    Lance « Lancer-Cockpit.bat » : lecture auto du fichier MT5 toutes les minutes, sur tous les navigateurs. Estimations indicatives, pas un conseil en investissement.
   </div>
   </div>
   </main>
@@ -578,7 +578,13 @@
 
 <script>
 const FILE_NAME = "Synchronisation APP Gestion portefeuille-Reel";
-const POLL_MS = 5*60*1000;
+/* Relecture des données toutes les minutes : le fichier publié ne change que
+   toutes les ~5 min (cadence EA + publieur VPS), mais un poll fréquent réduit le
+   délai de détection d'un nouveau commit à ≤1 min au lieu de ≤5. */
+const POLL_MS = 60*1000;
+/* Cadence des instantanés d'équité (sparkline) : découplée du poll pour ne pas
+   quintupler le rythme d'écriture dans le localStorage. */
+const SNAP_MS = 5*60*1000;
 /* Les données sont lues sur raw.githubusercontent.com et non sur l'URL GitHub
    Pages : le VPS committe toutes les 5 min, or Pages plafonne à ~10 builds/heure
    et sert donc un data.json en retard de 10-20 min. Le domaine raw sert le
@@ -2795,7 +2801,7 @@ function ingest(data){
   const a=analyze(data);
   const snap={t:Date.now(),eq:Math.round(a.equity)};
   const last=store.equitySnaps[store.equitySnaps.length-1];
-  if(!last||last.eq!==snap.eq||snap.t-last.t>POLL_MS*0.9){store.equitySnaps.push(snap);if(store.equitySnaps.length>2000)store.equitySnaps.shift();saveStore(store);}
+  if(!last||snap.t-last.t>SNAP_MS*0.9||(last.eq!==snap.eq&&snap.t-last.t>SNAP_MS*0.4)){store.equitySnaps.push(snap);if(store.equitySnaps.length>2000)store.equitySnaps.shift();saveStore(store);}
   document.getElementById('acctLine').textContent=`Compte ${data.account||'?'} · ${data.type||''} · ${data.company||''} · ${data.currency||'USD'}`;
   setConn(true); updateSyncLabel(data); render();
 }
@@ -2830,7 +2836,7 @@ function updateSyncLabel(data){
 }
 function setConn(on,txt){
   const dot=document.getElementById('connDot'),lab=document.getElementById('connTxt');
-  dot.className='dot '+(on?'on':'off'); lab.textContent=txt||(on?'Connecté · lecture auto 5 min':'Déconnecté');
+  dot.className='dot '+(on?'on':'off'); lab.textContent=txt||(on?'Connecté · lecture auto 1 min':'Déconnecté');
   document.getElementById('btnConnect').innerHTML=on?'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>Fichier connecté':'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>Connecter le fichier';
 }
 function startPolling(fn){ fn=fn||readHandle; if(pollTimer)clearInterval(pollTimer); pollTimer=setInterval(fn,POLL_MS); }
