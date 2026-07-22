@@ -850,7 +850,7 @@ function renderTop(a){
   const ds=estimateDScore(a);
   const cards=[
     {lab:'DScore estimé',ico:'M12 2 4 7v6c0 5 8 9 8 9s8-4 8-9V7l-8-5Z',val:ds.score,cls:ds.score>=60?'pos':ds.score>=55?'warn':'',delta:ds.score>=60?'−40 % commissions':ds.score>=55?'−20 % commissions':'objectif 55'},
-    {lab:'Équité',ico:'M3 3v18h18',val:money(a.equity),delta:`Solde ${money(a.balance)}`},
+    {lab:'Solde',ico:'M3 3v18h18',val:money(a.balance),delta:`Équité ${money(a.equity)}`},
     {lab:'P&L réalisé',val:(a.realized>=0?'+':'')+money(a.realized),cls:a.realized>=0?'pos':'neg',delta:pct(a.retPct)+' du capital'},
     {lab:'Drawdown actuel',val:pct(a.curDDpct),cls:a.curDDpct>=store.settings.ddWarn?'neg':a.curDDpct>=store.settings.ddWarn*0.6?'warn':'pos',delta:`max ${pct(a.maxDDpct)}`}
   ];
@@ -1019,7 +1019,7 @@ function renderJournal(a){
     {lab:'Profit quotidien moyen', val:money(s.dailyAvg), cls:s.dailyAvg>=0?'pos':'neg', sub:s.nDays+' jours tradés'},
     {lab:'Profit mensuel moyen', val:money(s.monthlyAvg), cls:s.monthlyAvg>=0?'pos':'neg', sub:s.nMonths+' mois'},
     {lab:'Mois positifs', val:s.nMonths?pct(s.moisPos/s.nMonths*100,0):'—', sub:s.moisPos+'/'+s.nMonths+' mois'},
-    {lab:'Équité', val:money(a.equity), sub:'solde '+money(a.balance)},
+    {lab:'Solde', val:money(a.balance), sub:'équité '+money(a.equity)},
     {lab:'P&L flottant', val:(a.floating>=0?'+':'')+money(a.floating), cls:a.floating>=0?'pos':'neg', sub:a.open.length+' position(s) ouverte(s)'}
   ];
   document.getElementById('journalStats2').innerHTML=det.map(statHTML).join('');
