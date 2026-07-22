@@ -579,16 +579,20 @@
 <script>
 const FILE_NAME = "Synchronisation APP Gestion portefeuille-Reel";
 const POLL_MS = 5*60*1000;
-const DATA_ENDPOINT = "data.json";
+/* Les données sont lues sur raw.githubusercontent.com et non sur l'URL GitHub
+   Pages : le VPS committe toutes les 5 min, or Pages plafonne à ~10 builds/heure
+   et sert donc un data.json en retard de 10-20 min. Le domaine raw sert le
+   dernier commit directement (CORS ouvert, cache contourné par le ?t= du fetch). */
+const DATA_ENDPOINT = "https://raw.githubusercontent.com/htagba/cockpit-dz-7f3a9b/main/data.json";
 /* Backtests publiés, déposés à côté de index.html sur GitHub. Lu UNE fois au
    démarrage (pas dans la boucle des 5 min) : ce fichier ne change que lorsque
    tu republies. Même nom en local : le serveur Python sert le dossier. */
-const BT_ENDPOINT = "backtests.json";
+const BT_ENDPOINT = DATA_ENDPOINT.replace(/data(\.json)?$/, 'backtests.json');
 /* Fichier du COMPTE DÉMO (banc d'essai des sets hors réel), même schéma que le
    réel. En local, le serveur Python le sert sur /demo ; en ligne, le VPS pousse
    demo.json à côté de data.json. Dérivé de DATA_ENDPOINT pour que les deux
    fichiers HTML (local / web) ne diffèrent toujours QUE par une ligne. */
-const DEMO_ENDPOINT = (DATA_ENDPOINT === "data") ? "demo" : "demo.json";
+const DEMO_ENDPOINT = (DATA_ENDPOINT === "data") ? "demo" : DATA_ENDPOINT.replace(/data\.json$/, 'demo.json');
 const SERVER_MODE = location.protocol.startsWith('http');
 let fileHandle=null, pollTimer=null, lastData=null, lastDemo=null, chart=null, lastA=null, lastADemo=null, cvMap={};
 
