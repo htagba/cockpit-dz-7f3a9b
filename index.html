@@ -1614,7 +1614,16 @@ async function chargerBacktestsPublies(){
     // Publication sans date : on ne l'impose pas à un navigateur qui travaille déjà.
     if(!rien && !distant) return null;
     // Rien de neuf : on garde l'existant (et donc les imports faits ici depuis).
-    if(!rien && local && distant && distant<=local) return null;
+    if(!rien && local && distant && distant<=local){
+      // Rattrapage : une app mise à jour sait lire des champs (laboratoire,
+      // rapport QA) qu'une version antérieure avait ignorés en adoptant CE même
+      // paquet. On les récupère s'ils manquent localement, sans toucher au reste.
+      let maj=false;
+      if(o.labo && !(store.labo&&store.labo.sets&&store.labo.sets.length)){ store.labo=o.labo; maj=true; }
+      if(o.pfReport && !store.pfReport){ store.pfReport=o.pfReport; maj=true; }
+      if(maj) saveStore(store);
+      return null;
+    }
     store.backtests=o.backtests;
     if(o.pfReport) store.pfReport=o.pfReport;   // rapport portfolio publié avec les backtests
     if(o.registre) store.registre=o.registre;   // allocation des sets ({} = défauts du code)
