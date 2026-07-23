@@ -977,8 +977,12 @@ function renderSets(a){
   grid.innerHTML=gs.map(g=>{
     const tot=g.pl+g.floating; const dd=setDD(g); const [cls,txt]=setHealth(g);
     const syms=[...new Set(g.trades.map(t=>t.symbol))].join(', ');
+    // Préfixe « Magic N - » NON éditable devant le nom : le champ reste réservé
+    // au renommage, le magic vient de la clé du groupe.
+    const mk=g.key&&g.key.indexOf('magic:')===0?g.key.slice(6):null;
     return `<div class="setcard">
       <div class="top">
+        ${mk!=null?`<span style="flex:none;color:var(--muted);font-weight:600;font-size:13px;white-space:nowrap">Magic ${mk} -</span>`:''}
         <input class="setname" value="${setLabel(g.key).replace(/"/g,'&quot;')}" data-key="${g.key}">
         <span class="tag ${cls}">${txt}</span>
       </div>
