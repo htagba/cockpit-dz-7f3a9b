@@ -546,14 +546,20 @@
 
   <!-- STATS HISTORIQUE PORTFOLIO -->
   <div class="view" id="v-portfolio">
-    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Statistiques historiques du <b>portefeuille global</b> réel, issues du rapport <b>QuantAnalyzer</b> — backtests <b>2020 → juillet 2026</b> à <b>0,1 % du solde par trade</b> (1 lot, plafond 20 lots). Chiffres figés du rapport ; la courbe d'équité est reconstituée à partir de la performance mensuelle.</div></div>
+    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Statistiques historiques du <b>portefeuille global</b> réel, issues du rapport <b>QuantAnalyzer</b> à <b>0,1 % du solde par trade</b> (1 lot, plafond 20 lots). La courbe d'équité est reconstituée à partir de la performance mensuelle. Pour mettre à jour ces chiffres, importe simplement le <b>rapport portfolio PDF</b> exporté de QuantAnalyzer.</div></div>
 
-    <div class="grid g4" id="pfStats" style="margin-top:4px"></div>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
+      <button class="ghost sm" id="pfImportBtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Importer le rapport PDF</button>
+      <span class="help" id="pfSource" style="margin:0"></span>
+    </div>
+    <input type="file" id="pfFile" accept=".pdf,application/pdf" style="display:none">
+
+    <div class="grid g4" id="pfStats" style="margin-top:12px"></div>
 
     <div class="card" style="margin-top:16px">
       <h3>Courbe d'équité <span style="font-weight:400;color:var(--dim);font-size:11px">(P&amp;L cumulé)</span></h3>
       <canvas id="pfEquity" height="110"></canvas>
-      <div class="help" style="margin-top:8px">Reconstituée depuis la performance mensuelle du rapport (granularité mensuelle). Le drawdown réel du rapport, mesuré au trade, est de <b>1,89 %</b> (4&nbsp;566,63&nbsp;$).</div>
+      <div class="help" id="pfEquityHelp" style="margin-top:8px"></div>
     </div>
 
     <div class="card" style="margin-top:14px">
@@ -609,8 +615,9 @@ function saveStore(s){ localStorage.setItem(LS,JSON.stringify(s)); }
 let store = Object.assign({setNames:{}, equitySnaps:[], settings:{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10}}, loadStore());
 store.setNames=store.setNames||{}; store.equitySnaps=store.equitySnaps||[]; store.settings=store.settings||{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10};
 /* ================= REGISTRE DES 35 SETS (source : « Tous les sets.xlsx ») =====
-   Statut par défaut : 1-26 & 35 = RÉEL (Imperium 6-10 ajoutés au réel le 22/07/2026) ·
-   27-34 = DÉMO (banc d'essai des remplaçants). `a` = alias de reconnaissance pour apparier les noms
+   Statut par défaut : 1-20 & 35 = RÉEL (compte « Only Nomad », 21 sets, juillet 2026) ·
+   21-34 = DÉMO (banc d'essai : Swing sniper 21-26 et Dolt 27-34).
+   `a` = alias de reconnaissance pour apparier les noms
    de rapports de backtest qui ne reprennent pas le libellé exact du registre. */
 const SETS_REGISTRY = [
   {m:1,  n:"APEX EA EURUSD H1 6Y 7.0"},
@@ -649,16 +656,16 @@ const SETS_REGISTRY = [
   {m:34, n:"Dolt MultiStrategy - Slot 8 - XAUUSD H1 - B",a:"slot8"},
   {m:35, n:"APEX EA AUDUSD H1 7.0"}
 ];
-const REEL_MAX = 27;
+const REEL_MAX = 21;
 const normNom = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const regEntree = m => SETS_REGISTRY.find(r=>r.m===Number(m)) || null;
 const regNom = m => { const r=regEntree(m); return r ? r.n : ('Magic '+m); };
-/* Statut d'un set : 'reel' | 'demo' | 'off'. Défaut : 1-26 & 35 réel, 27-34 démo.
+/* Statut d'un set : 'reel' | 'demo' | 'off'. Défaut : 1-20 & 35 réel, 21-34 démo.
    Les bascules (rotations) sont déclarées dans l'app et historisées. */
 function regStatut(m){ const o=(store.registre||{})[String(m)]; return o ? o.statut : statutDefaut(Number(m)); }
-/* Allocation par défaut du compte réel (mise à jour 22/07/2026 : Imperium 6-10 ajoutés au réel) :
-   1-26 & 35 = réel · 27-34 = démo. */
-function statutDefaut(m){ return (m>=27 && m<=34) ? 'demo' : 'reel'; }
+/* Allocation par défaut du compte réel « Only Nomad » (23/07/2026, 21 sets) :
+   1-20 & 35 = réel · 21-34 = démo (Swing sniper 21-26 en banc d'essai avec les Dolt). */
+function statutDefaut(m){ return (m>=21 && m<=34) ? 'demo' : 'reel'; }
 function regDepuis(m){ const o=(store.registre||{})[String(m)]; return o ? o.depuis : null; }
 function regBascule(m, statut, motif){
   store.registre = store.registre || {};
@@ -682,6 +689,13 @@ store.setNames = Object.assign({}, DEFAULT_SET_NAMES, store.setNames);
    et risque abaissé à 0,1 %/trade. On repart des
    statuts par défaut (les bascules de l'ancien compte n'ont plus de sens) et on
    force le risque. L'historique des rotations (store.rotations) est conservé. */
+/* Compte « Only Nomad » (23/07/2026) : nouveau compte MT5, portefeuille resserré
+   à 21 sets (1-20 & 35). On repart une nouvelle fois des statuts par défaut. */
+if(!store.majCompteOnlyNomad){
+  store.registre = {};
+  store.majCompteOnlyNomad = true;
+  saveStore(store);
+}
 if(!store.majCompteJuil2026){
   store.registre = {};
   store.settings = store.settings || {};
@@ -1505,7 +1519,10 @@ function btPaquet(){
     // Réglages de risque de l'app : le veilleur/rapport les liront ici comme
     // source de vérité (une seule saisie, dans l'app). Voir apply_reglages().
     reglages:{ riskPct:riskCible(), ddWarn:Number(store.settings.ddWarn)||6, ddMax:Number(store.settings.ddMax)||10 },
-    backtests:store.backtests };
+    backtests:store.backtests,
+    // Rapport portfolio QuantAnalyzer importé (s'il existe) : il voyage avec la
+    // publication pour que les autres appareils l'affichent aussi.
+    pfReport:store.pfReport||undefined };
 }
 
 function btPublier(){
@@ -1541,6 +1558,7 @@ async function chargerBacktestsPublies(){
     // Rien de neuf : on garde l'existant (et donc les imports faits ici depuis).
     if(!rien && local && distant && distant<=local) return null;
     store.backtests=o.backtests;
+    if(o.pfReport) store.pfReport=o.pfReport;   // rapport portfolio publié avec les backtests
     store.btPublieLe=distant;
     saveStore(store);
     return { nb:o.backtests.length, quand:distant, remplace:!rien };
@@ -2907,31 +2925,128 @@ function showDropzone(){
 
 /* tabs */
 /* ====== Stats historique Portfolio (source : rapport QuantAnalyzer) ======
-   Chiffres FIGÉS du rapport « Portfolio Réel + Démo » — backtests 2020 → juil.
-   2026, 0,1 %/trade (1 lot, plafond 20 lots). La courbe d'équité est
-   reconstituée à partir de la performance mensuelle (granularité mensuelle). */
+   Valeurs PAR DÉFAUT : rapport « Portfolio Only Nomad » (21 sets, nouveau compte
+   MT5, juillet 2026) — backtests 2020 → juil. 2026, 0,1 %/trade (1 lot, plafond
+   20 lots). Un rapport PDF importé (bouton de l'onglet) est stocké dans
+   store.pfReport et remplace ces valeurs ; « Publier les backtests » le diffuse
+   aux autres appareils. La courbe d'équité est reconstituée du mensuel. */
 const PF_REPORT = {
-  global:{ profit:189347.21, trades:5734, sharpe:0.22, pf:1.78, retDD:41.46, winPct:59.99,
-    ddDollar:4566.63, ddPct:1.89, dailyAvg:79.16, mthlyAvg:2396.8, yrlyAvg:28760.7, avgTrade:33.02,
-    yrlyPct:28.76, cagr:16.39, annualMaxDD:8.67, expectancyR:0.31, sqn:14.78 },
-  detail:{ winsLossRatio:1.5, payout:1.19, ahpr:0.02, zScore:-8.5, zProb:0, expectancy:33.02, deviation:169.16,
-    stagnationDays:68, stagnationPct:2.84, wins:3440, losses:2294, grossProfit:430607.99, grossLoss:-241260.78,
-    avgWin:125.18, avgLoss:-105.17, largestWin:2227.8, largestLoss:-1113.86, maxConsecWins:19, maxConsecLosses:9,
-    avgConsecWins:2.81, avgConsecLoss:1.88 },
+  global:{ profit:169062.65, trades:5932, sharpe:0.26, pf:1.73, retDD:36.4, winPct:61.26,
+    ddDollar:4643.96, ddPct:1.9, dailyAvg:70.68, mthlyAvg:2140.03, yrlyAvg:25680.88, avgTrade:28.5,
+    yrlyPct:25.68, cagr:15.19, annualMaxDD:7.99, expectancyR:0.28, sqn:16.22 },
+  detail:{ winsLossRatio:1.58, payout:1.09, ahpr:0.02, zScore:-5, zProb:100, expectancy:28.5, deviation:135.29,
+    stagnationDays:82, stagnationPct:3.43, wins:3634, losses:2298, grossProfit:401220.71, grossLoss:-232158.06,
+    avgWin:110.41, avgLoss:-101.03, largestWin:1522.4, largestLoss:-1113.86, maxConsecWins:22, maxConsecLosses:8,
+    avgConsecWins:2.75, avgConsecLoss:1.74 },
   monthly:{
-    2020:[1304.38,2295.86,9800.65,5694.75,147.58,4780.8,2181.56,1879.03,2171.17,440.83,2813.21,1418.56],
-    2021:[-440.59,1926.58,3214.9,1607.6,555.7,3585.34,1034.26,1665.14,2977.88,-489.43,2463.03,369.63],
-    2022:[1497.49,181.23,5160.06,5718.12,113.58,3215.98,4708.22,3468.24,4169.79,4955.95,5173.72,1442.53],
-    2023:[2144.11,3546.54,3781.43,1338.88,1680.56,1724.06,1237.21,989.37,2611.28,1901.13,736.45,-135.27],
-    2024:[296.79,1470.29,620.97,2031.24,3646.52,1356.91,891.15,4284.89,3180.09,2085.91,607.49,2275.15],
-    2025:[3936.1,-1896.11,3743.04,3938.05,2303.98,2118.83,1173.73,889.84,900.63,3026.47,2885,3327.5],
-    2026:[4822.7,6138.76,4994.85,7250.8,258.72,1473.9,553.94]
-  }
+    2020:[1480.21,2320.75,11097.3,4906.84,-12.75,4882.89,562.76,1685.68,3312.7,1072.49,2527.51,1104.49],
+    2021:[426.14,2566.81,2662.96,1462.89,1616.5,3690.93,2680.14,1979.03,1726.13,365.47,2700.59,947.64],
+    2022:[1072.57,252.74,4971.12,6181.38,556.72,4293.33,5370.62,3210.9,4410.44,5422.25,4413.31,905.59],
+    2023:[3536.51,1861.39,3907.34,1758.63,633.01,1270.91,2444.44,1550.2,1352.92,2281.7,1735.12,260.08],
+    2024:[157.14,1447.84,581.22,1551.04,2315.19,588.79,1524.16,2924.89,1945.82,2739.68,455.01,2426.5],
+    2025:[4806.69,-2634.28,2700.9,4155.57,1055.25,1093.5,1327.23,1008.65,981.48,3845.41,1884.14,740.98],
+    2026:[2004.23,1989.59,1876.09,1560.08,-747.59,478.98,859.15]
+  },
+  meta:{ fichier:'Portfolio Only Nomad', importeLe:'2026-07-23', nbStrategies:21 }
 };
+
+/* ---- Import d'un rapport portfolio PDF QuantAnalyzer ----
+   pdf.js est chargé À LA DEMANDE depuis le même CDN que Chart.js (rien ne pèse
+   tant qu'on n'importe pas). Le texte des pages est reconstitué ligne par ligne
+   (les éléments d'un PDF arrivent dans le désordre), puis parsé par ancrages :
+   bandeau de stats (p.1), bloc STATS et table MONTHLY PERFORMANCE (p.2). */
+const PDFJS_URL='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+const PDFJS_WORKER='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+function pfChargerPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve();
+  return new Promise((ok,ko)=>{ const s=document.createElement('script'); s.src=PDFJS_URL;
+    s.onload=()=>{ pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS_WORKER; ok(); };
+    s.onerror=()=>ko(new Error('pdf.js inaccessible — connexion internet requise')); document.head.appendChild(s); });
+}
+async function pfLignesPage(doc,i){
+  const page=await doc.getPage(i), tc=await page.getTextContent(), rows={};
+  tc.items.forEach(it=>{ const y=Math.round(it.transform[5]); (rows[y]=rows[y]||[]).push({x:it.transform[4],s:it.str}); });
+  return Object.keys(rows).map(Number).sort((a,b)=>b-a)
+    .map(y=>rows[y].sort((a,b)=>a.x-b.x).map(o=>o.s).join(' ').replace(/\s+/g,' ').trim()).filter(l=>l);
+}
+const pfNum=s=>{ const v=parseFloat(String(s).replace(/[$%\s]/g,'').replace(',','.')); return isNaN(v)?null:v; };
+function pfParseRapport(pages, fichier){
+  const lignes=[].concat(...pages);
+  const texte=lignes.join('\n');
+  if(!/QUANT ANALYZER PORTFOLIO REPORT/i.test(texte)) throw new Error('ce PDF ne ressemble pas à un rapport portfolio QuantAnalyzer.');
+  const g={}, d={};
+  const nums=l=>(l.match(/-?[\d.]+/g)||[]).map(Number);
+  // Bandeau p.1 : sous « TOTAL PROFIT … WINNING % », une ligne de 5 nombres
+  // (trades, sharpe, PF, ret/DD, win%) et le « $ profit » sur sa propre ligne.
+  const iTop=lignes.findIndex(l=>/^TOTAL PROFIT/.test(l));
+  if(iTop>=0) for(let j=iTop+1;j<=iTop+3&&j<lignes.length;j++){
+    const l=lignes[j];
+    if(/^\$ ?-?[\d.]+$/.test(l)) g.profit=pfNum(l);
+    else if(g.trades==null){ const n=nums(l); if(n.length===5) [g.trades,g.sharpe,g.pf,g.retDD,g.winPct]=n; }
+  }
+  // Ligne « $ DD  DD%  $ jour  $ mois  $ trade » (drawdown & moyennes)
+  const lDD=lignes.find(l=>/^\$ ?-?[\d.]+ -?[\d.]+ % \$ ?-?[\d.]+ \$ ?-?[\d.]+ \$ ?-?[\d.]+$/.test(l));
+  if(lDD){ const n=nums(lDD); [g.ddDollar,g.ddPct,g.dailyAvg,g.mthlyAvg,g.avgTrade]=n; }
+  let m;
+  if(m=texte.match(/YRLY AVG PROFIT \$ ?(-?[\d.]+)/)) g.yrlyAvg=+m[1];
+  if(m=texte.match(/YRLY AVG % RET (-?[\d.]+) ?%/)) g.yrlyPct=+m[1];
+  if(m=texte.match(/CAGR (-?[\d.]+) ?%/)) g.cagr=+m[1];
+  const iCagr=lignes.findIndex(l=>/CAGR .*ANNUAL% \/ MAX DD%/.test(l));
+  if(iCagr>=0&&lignes[iCagr+1]){ const n=nums(lignes[iCagr+1]); if(n.length>=5){ g.annualMaxDD=n[0]; g.expectancyR=n[1]; g.sqn=n[3]; } }
+  // Bloc STATS : libellé → valeur
+  const champ=re=>{ const mm=texte.match(re); return mm?pfNum(mm[1]):null; };
+  d.winsLossRatio=champ(/Wins\/Losses Ratio (-?[\d.]+)/);
+  d.payout=champ(/Payout Ratio \(Avg Win\/Loss\) (-?[\d.]+)/);
+  d.ahpr=champ(/AHPR (-?[\d.]+)/);
+  d.zScore=champ(/Z-Score (-?[\d.]+)/);
+  d.zProb=champ(/Z-Probability (-?[\d.]+) ?%/);
+  d.expectancy=champ(/Expectancy (-?[\d.]+)/);
+  d.deviation=champ(/Deviation \$ ?(-?[\d.]+)/);
+  d.stagnationDays=champ(/Stagnation in Days (-?[\d.]+)/);
+  d.stagnationPct=champ(/Stagnation in % (-?[\d.]+) ?%/);
+  d.wins=champ(/# of Wins (\d+)/); d.losses=champ(/# of Losses (\d+)/);
+  d.grossProfit=champ(/Gross Profit \$ ?(-?[\d.]+)/); d.grossLoss=champ(/Gross Loss \$ ?(-?[\d.]+)/);
+  d.avgWin=champ(/Average Win \$ ?(-?[\d.]+)/); d.avgLoss=champ(/Average Loss \$ ?(-?[\d.]+)/);
+  d.largestWin=champ(/Largest Win \$ ?(-?[\d.]+)/); d.largestLoss=champ(/Largest Loss \$ ?(-?[\d.]+)/);
+  d.maxConsecWins=champ(/Max Consec Wins (\d+)/); d.maxConsecLosses=champ(/Max Consec Losses (\d+)/);
+  d.avgConsecWins=champ(/Avg Consec Wins (-?[\d.]+)/); d.avgConsecLoss=champ(/Avg Consec Loss (-?[\d.]+)/);
+  // Table mensuelle : « 2026 v×12 YTD » — on garde 12 valeurs, et on retire les
+  // mois à 0 en fin de DERNIÈRE année (mois pas encore tradés).
+  const monthly={};
+  lignes.forEach(l=>{ const mm=l.match(/^(20\d\d) ((?:-?[\d.]+ ){12}-?[\d.]+)$/); if(mm) monthly[mm[1]]=mm[2].trim().split(/ +/).map(Number).slice(0,12); });
+  const annees=Object.keys(monthly);
+  if(annees.length){ const t=monthly[annees.sort().slice(-1)[0]]; while(t.length&&t[t.length-1]===0) t.pop(); }
+  // Nombre de stratégies : lignes « S2 … » de la table (dédupliquées, la table est en 2 volets)
+  const strat=new Set(); lignes.forEach(l=>{ const mm=l.match(/^S(\d+) /); if(mm) strat.add(mm[1]); });
+  if(g.profit==null||g.trades==null||!annees.length) throw new Error('rapport incomplet — bandeau de stats ou table mensuelle introuvable.');
+  return { global:g, detail:d, monthly,
+    meta:{ fichier:fichier||'', importeLe:new Date().toISOString().slice(0,10), nbStrategies:strat.size||null } };
+}
+async function pfImporterPdf(file){
+  const src=document.getElementById('pfSource');
+  try{
+    if(src) src.textContent='Lecture du PDF…';
+    await pfChargerPdfJs();
+    const doc=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+    const pages=[];   // bandeau, STATS et mensuel tiennent dans les premières pages
+    for(let i=1;i<=Math.min(doc.numPages,4);i++) pages.push(await pfLignesPage(doc,i));
+    const rap=pfParseRapport(pages, (file.name||'').replace(/\.pdf$/i,''));
+    store.pfReport=rap; saveStore(store);
+    renderPortfolio();
+    if(src) src.textContent='✅ Importé : '+rap.meta.fichier+' · '+(rap.meta.nbStrategies||'?')+' stratégies. Pense à « Publier les backtests » pour tes autres appareils.';
+  }catch(e){ console.error(e); if(src) src.textContent='❌ Import impossible : '+e.message; }
+}
 function renderPortfolio(){
-  const g=PF_REPORT.global, d=PF_REPORT.detail;
+  const R=store.pfReport||PF_REPORT;      // rapport importé prioritaire, sinon valeurs intégrées
+  const g=R.global, d=R.detail;
   const money0=v=>fmt(v,0)+' $';
-  const nAns=Object.keys(PF_REPORT.monthly).length;
+  const nAns=Object.keys(R.monthly).length;
+  const src=document.getElementById('pfSource');
+  if(src&&!/…$/.test(src.textContent)) src.textContent=(store.pfReport?'Rapport importé : ':'Rapport intégré : ')
+    +((R.meta&&R.meta.fichier)||'QuantAnalyzer')+((R.meta&&R.meta.importeLe)?' · '+R.meta.importeLe:'')
+    +((R.meta&&R.meta.nbStrategies)?' · '+R.meta.nbStrategies+' stratégies':'');
+  const eqh=document.getElementById('pfEquityHelp');
+  if(eqh) eqh.innerHTML='Reconstituée depuis la performance mensuelle du rapport (granularité mensuelle). Le drawdown réel du rapport, mesuré au trade, est de <b>'+pct(g.ddPct,2)+'</b> ('+money(g.ddDollar)+').';
   const tiles=[
     {lab:'Profit total', val:money0(g.profit), cls:'pos', sub:g.trades.toLocaleString('fr-FR')+' trades'},
     {lab:'Profit Factor', val:fmt(g.pf,2), cls:g.pf>=1.3?'pos':'', sub:'gains ÷ pertes bruts'},
@@ -2949,14 +3064,14 @@ function renderPortfolio(){
   document.getElementById('pfStats').innerHTML=tiles.map(statHTML).join('');
   const MOIS=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
   const labels=[], serie=[]; let cum=0;
-  Object.keys(PF_REPORT.monthly).sort().forEach(y=>{
-    PF_REPORT.monthly[y].forEach((v,m)=>{ cum+=v; labels.push(MOIS[m]+' '+String(y).slice(2)); serie.push(round2(cum)); });
+  Object.keys(R.monthly).sort().forEach(y=>{
+    R.monthly[y].forEach((v,m)=>{ cum+=v; labels.push(MOIS[m]+' '+String(y).slice(2)); serie.push(round2(cum)); });
   });
   const money0b=v=>fmt(v,0)+' $';
   makeLineChart(document.getElementById('pfEquity'), labels,
     [{data:serie, borderColor:'#7c6df2', backgroundColor:'rgba(124,109,242,.12)', fill:true, tension:.2, pointRadius:0, borderWidth:2}],
     '', money0b);
-  document.getElementById('pfMonthly').innerHTML=moisGrilleHTML(PF_REPORT.monthly);
+  document.getElementById('pfMonthly').innerHTML=moisGrilleHTML(R.monthly);
   const det=[
     {lab:'Profit brut', val:money0(d.grossProfit), cls:'pos'},
     {lab:'Perte brute', val:money0(d.grossLoss), cls:'neg'},
@@ -2973,6 +3088,8 @@ function renderPortfolio(){
   ];
   document.getElementById('pfDetail').innerHTML=det.map(statHTML).join('');
 }
+document.getElementById('pfImportBtn').addEventListener('click',()=>document.getElementById('pfFile').click());
+document.getElementById('pfFile').addEventListener('change',e=>{ const f=e.target.files[0]; if(f) pfImporterPdf(f); e.target.value=''; });
 
 document.getElementById('tabs').addEventListener('click',e=>{
   const t=e.target.closest('.tab'); if(!t)return;
