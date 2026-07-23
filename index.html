@@ -511,6 +511,11 @@
       </div>
     </details>
 
+    <details class="card" data-sect="demoBts" style="margin-top:14px">
+      <summary><h3>Backtests des sets démo <span style="font-weight:400;color:var(--dim);font-size:11px">(références du banc d'essai — routées ici par le registre)</span></h3></summary>
+      <div class="sect-body"><div id="btListDemo"></div></div>
+    </details>
+
     <details class="card" data-sect="demoRot" style="margin-top:14px" open>
       <summary><h3>Rotation réel ↔ démo <span class="tag a" id="demoRotTag">—</span></h3></summary>
       <div class="sect-body">
@@ -1586,21 +1591,49 @@ async function chargerBacktestsPublies(){
   }catch(e){ return null; }   // absent, hors-ligne ou JSON invalide : on continue sans
 }
 
+/* Statut d'un backtest via le magic de son set : 'reel' | 'demo' | 'off',
+   ou null si aucun magic n'est reconnu (carte alors montrée dans Backtests). */
+function btStatutSet(b){ const m=btMagic(b); return m==null?null:regStatut(m); }
+/* Le registre ROUTE les cartes : réel → onglet Backtests · démo → onglet
+   Compte démo · désactivé → masqué (mais conservé dans le stockage et publié). */
 function renderBacktests(a){
-  const list=document.getElementById('btList'); const bts=store.backtests;
+  const list=document.getElementById('btList'); const tous=store.backtests;
   const tb=document.getElementById('btToolbar'); const cnt=document.getElementById('btCount');
+  const bts=tous.filter(b=>{ const st=btStatutSet(b); return st==='reel'||st===null; });
+  const nDemo=tous.filter(b=>btStatutSet(b)==='demo').length;
+  const nOff=tous.filter(b=>btStatutSet(b)==='off').length;
   // détruire les graphiques existants avant de reconstruire le DOM
   list.querySelectorAll('canvas').forEach(c=>{ if(c._chart){ c._chart.destroy(); c._chart=null; } });
-  if(!bts.length){
+  if(!tous.length){
     list.innerHTML='<div class="empty">Aucun backtest importé. Glisse tes rapports HTML ci-dessus.</div>';
     const wrapE=document.getElementById('btListWrap'); if(wrapE) wrapE.style.display='none';
     if(tb) tb.style.display='none';
-    renderBtCorr(); renderBtCompare(a); if(a) renderControle(a); return;
+    renderBtCorr(); renderBtCompare(a); if(a) renderControle(a); demoCartes(); return;
   }
   const wrap=document.getElementById('btListWrap'); if(wrap) wrap.style.display='block';
-  if(tb){ tb.style.display='flex'; cnt.textContent=bts.length+' backtest'+(bts.length>1?'s':'')+' importé'+(bts.length>1?'s':'')+' · 0,1 % du solde par trade'; }
+  if(tb){ tb.style.display='flex'; cnt.textContent=bts.length+' set(s) réel(s)'+(nDemo?' · '+nDemo+' démo (onglet Compte démo)':'')+(nOff?' · '+nOff+' masqué(s)':'')+' · 0,1 % du solde par trade'; }
+  if(!bts.length){
+    list.innerHTML='<div class="empty">Aucun backtest de set réel. Les cartes des sets démo sont dans l\'onglet « Compte démo » ; bascule un set en réel dans le registre pour voir sa carte ici.</div>';
+    renderBtCorr(); renderBtCompare(a); if(a) renderControle(a); demoCartes(); return;
+  }
+  btCartesRender(list, bts, a);
+  renderBtCorr(); renderBtCompare(a); if(a) renderControle(a);
+  demoCartes();
+}
+/* Cartes des backtests des sets DÉMO (banc d'essai), rendues dans l'onglet
+   Compte démo et comparées au live du compte DÉMO. */
+function demoCartes(){
+  const list=document.getElementById('btListDemo'); if(!list) return;
+  const demos=store.backtests.filter(b=>btStatutSet(b)==='demo');
+  list.querySelectorAll('canvas').forEach(c=>{ if(c._chart){ c._chart.destroy(); c._chart=null; } });
+  if(!demos.length){ list.innerHTML='<div class="empty">Aucun backtest de set démo importé (l\'import se fait dans l\'onglet Backtests).</div>'; return; }
+  btCartesRender(list, demos, lastADemo);
+}
+/* Rendu partagé d'une liste de cartes (courbe + stats + actions). aRef = compte
+   live de comparaison : réel pour l'onglet Backtests, démo pour le banc d'essai. */
+function btCartesRender(list, bts, aRef){
   const liveDD={};
-  if(a&&a.groups){ Object.keys(a.groups).forEach(k=>{ if(k.indexOf('magic:')===0) liveDD[k.slice(6)]={dd:setDD(a.groups[k]),n:a.groups[k].closed.length}; }); }
+  if(aRef&&aRef.groups){ Object.keys(aRef.groups).forEach(k=>{ if(k.indexOf('magic:')===0) liveDD[k.slice(6)]={dd:setDD(aRef.groups[k]),n:aRef.groups[k].closed.length}; }); }
   // ---- carte unique par set : courbe d'équité + stats clés ----
   list.innerHTML=bts.map(b=>{ const s=b.stats; const inc=b.included!==false;
     const dep=Number(b.deposit)||100000;
@@ -1632,8 +1665,8 @@ function renderBacktests(a){
       const mg=(b.magic!=null&&b.magic!=='')?String(b.magic):(autoMagic(b.name)||'');
       let cmp;
       if(!mg){ cmp='<span style="color:var(--dim)">renseigne le magic du set live pour comparer le drawdown</span>'; }
-      else if(!liveDD[mg]||!liveDD[mg].n){ cmp='DD réel : <b>—</b> <span style="color:var(--dim)">(pas encore de trade live)</span> &nbsp;·&nbsp; réf. backtest : <b>'+pct(s.maxDDpct,2)+'</b>'; }
-      else { const ld=liveDD[mg].dd, over=ld>s.maxDDpct; cmp='DD réel : <b class="'+(over?'neg':'pos')+'">'+pct(ld,2)+'</b> &nbsp;·&nbsp; réf. backtest : <b>'+pct(s.maxDDpct,2)+'</b> &nbsp;·&nbsp; '+(over?'🔴 dépasse la réf.':'🟢 sous la réf.'); }
+      else if(!liveDD[mg]||!liveDD[mg].n){ cmp='DD live : <b>—</b> <span style="color:var(--dim)">(pas encore de trade live)</span> &nbsp;·&nbsp; réf. backtest : <b>'+pct(s.maxDDpct,2)+'</b>'; }
+      else { const ld=liveDD[mg].dd, over=ld>s.maxDDpct; cmp='DD live : <b class="'+(over?'neg':'pos')+'">'+pct(ld,2)+'</b> &nbsp;·&nbsp; réf. backtest : <b>'+pct(s.maxDDpct,2)+'</b> &nbsp;·&nbsp; '+(over?'🔴 dépasse la réf.':'🟢 sous la réf.'); }
       return '<div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;font-size:12.5px"><label style="font-size:12px;color:var(--muted);margin:0">Set live (magic) :</label><input type="number" class="bt-magic" data-id="'+b.id+'" value="'+mg+'" placeholder="—" style="width:88px;padding:5px 8px"><span style="flex:1;min-width:220px">'+cmp+'</span></div>';
     })()}
     <div class="help" style="margin-top:8px">${b.symbol||''}${b.period?(' · '+b.period):''} · dépôt ${money(dep)} · risque 0,1 % du solde par trade</div>
@@ -1652,7 +1685,6 @@ function renderBacktests(a){
   list.querySelectorAll('[data-inc]').forEach(cb=>cb.addEventListener('change',e=>{const b=store.backtests.find(x=>x.id===e.target.dataset.inc);if(b){b.included=e.target.checked;saveStore(store);renderBacktests(lastA);}}));
   list.querySelectorAll('[data-del]').forEach(btn=>btn.addEventListener('click',e=>{store.backtests=store.backtests.filter(x=>x.id!==e.target.dataset.del);saveStore(store);renderBacktests(lastA);}));
   list.querySelectorAll('.bt-magic').forEach(inp=>inp.addEventListener('change',e=>{const b=store.backtests.find(x=>x.id===e.target.dataset.id);if(b){const v=e.target.value.trim();b.magic=v===''?null:v;saveStore(store);renderBacktests(lastA);}}));
-  renderBtCorr(); renderBtCompare(a); if(a) renderControle(a);
 }
 
 const BT_COLORS=['#7c6df2','#388bfd','#2ea043','#d29922','#f85149','#1d9e75','#d4537e','#85b7eb','#ef9f27','#c0dd97','#e24b4a','#5dcaa5'];
@@ -2507,7 +2539,7 @@ function renderDemo(){
   const sync=document.getElementById('demoSyncTxt'); if(!sync) return;
   if(!lastDemo) sync.innerHTML='Fichier démo pas encore reçu (« '+DEMO_ENDPOINT+' »). En ligne : le VPS doit pousser <b>demo.json</b> ; en local : route <b>/demo</b> du serveur. En attendant, tu peux';
   else sync.innerHTML='Compte démo <b>'+(lastDemo.account||'?')+'</b> · données du <b>'+(lastDemo.exportedAt||'?')+'</b> · '+((lastDemo.trades||[]).length)+' trade(s) exporté(s). Pour recharger à la main :';
-  renderDemoTable(); renderRotation(); renderRevue(); renderRegistre();
+  renderDemoTable(); renderRotation(); renderRevue(); renderRegistre(); demoCartes();
 }
 
 function renderDemoTable(){
