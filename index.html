@@ -539,7 +539,7 @@
     </details>
 
     <details class="card" data-sect="demoReg" style="margin-top:14px">
-      <summary><h3>Registre des 34 sets <span style="font-weight:400;color:var(--dim);font-size:11px">(déclare ici les bascules faites dans MT5)</span></h3></summary>
+      <summary><h3>Registre des <span id="regNb">35</span> sets <span style="font-weight:400;color:var(--dim);font-size:11px">(déclare ici les bascules faites dans MT5)</span></h3></summary>
       <div class="sect-body"><div id="demoRegistre"></div></div>
     </details>
   </div>
@@ -671,6 +671,9 @@ function regBascule(m, statut, motif){
   store.registre = store.registre || {};
   store.registre[String(m)] = { statut, depuis:new Date().toISOString().slice(0,10), motif:motif||'' };
   (store.rotations = store.rotations || []).push({ date:new Date().toISOString().slice(0,10), magic:Number(m), vers:statut, motif:motif||'' });
+  // La case « inclus » du backtest suit le statut : les simulations de
+  // portefeuille reflètent les sets réels. Reste modifiable dans l'onglet Backtests.
+  const b=btByMagic(m); if(b) b.included=(statut==='reel');
   saveStore(store);
 }
 const regParStatut = st => SETS_REGISTRY.filter(r=>regStatut(r.m)===st);
@@ -695,6 +698,13 @@ if(!store.majCompteOnlyNomad){
   store.registre = {};
   store.majCompteOnlyNomad = true;
   saveStore(store);
+}
+/* Alignement initial (23/07/2026) : la case « inclus » de chaque backtest suit
+   le registre — les simulations de portefeuille reflètent les sets réels.
+   Ensuite, chaque bascule (regBascule) maintient l'alignement automatiquement. */
+if(!store.majAlignInclus){
+  (store.backtests||[]).forEach(b=>{ const mm=btMagic(b); if(mm!=null) b.included=(regStatut(mm)==='reel'); });
+  store.majAlignInclus=true; saveStore(store);
 }
 if(!store.majCompteJuil2026){
   store.registre = {};
@@ -1466,7 +1476,11 @@ function btImportFile(file){
       if(!tr||!tr.trades.length){ alert('Aucune table de trades reconnue dans « '+file.name+' ». Vérifie que c\'est bien un rapport MT5.'); return; }
       const c=btCompute(tr.trades, sum.deposit||tr.deposit);
       const sig=c.nbTrades+'|'+Math.round(c.net)+'|'+(c.days[0]?c.days[0][0]:'');
-      const entry={ id:'bt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), name:(file.name.replace(/\.html?$/i,'')||sum.symbol||tr.symbol), sig, deposit:c.deposit, included:true, symbol:sum.symbol||tr.symbol||'', period:sum.period||'', days:c.days, positions:c.positions, deals:c.deals, rt:c.rt, stats:{net:c.net,pf:c.pf,winRate:c.winRate,maxDDpct:c.maxDDpct,nbTrades:c.nbTrades,months:c.months,moisPositifs:c.moisPositifs,rendementNet:c.rendementNet} };
+      const nom=(file.name.replace(/\.html?$/i,'')||sum.symbol||tr.symbol);
+      // La case « portefeuille » d'un nouvel import suit le registre : seuls les
+      // sets en réel entrent dans les simulations. Sans magic reconnu : inclus.
+      const mAuto=autoMagic(nom);
+      const entry={ id:'bt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), name:nom, sig, deposit:c.deposit, included:(mAuto!=null ? regStatut(mAuto)==='reel' : true), symbol:sum.symbol||tr.symbol||'', period:sum.period||'', days:c.days, positions:c.positions, deals:c.deals, rt:c.rt, stats:{net:c.net,pf:c.pf,winRate:c.winRate,maxDDpct:c.maxDDpct,nbTrades:c.nbTrades,months:c.months,moisPositifs:c.moisPositifs,rendementNet:c.rendementNet} };
       const ix=store.backtests.findIndex(b=>b.sig&&b.sig===sig);
       if(ix>=0){ entry.included=store.backtests[ix].included; store.backtests[ix]=entry; }  // ré-import : remplace, pas de doublon
       else store.backtests.push(entry);
@@ -1522,7 +1536,11 @@ function btPaquet(){
     backtests:store.backtests,
     // Rapport portfolio QuantAnalyzer importé (s'il existe) : il voyage avec la
     // publication pour que les autres appareils l'affichent aussi.
-    pfReport:store.pfReport||undefined };
+    pfReport:store.pfReport||undefined,
+    // Allocation des sets + historique des rotations + cycle de revue :
+    // l'appareil qui publie fait foi, les autres s'alignent au chargement.
+    registre:store.registre||{}, rotations:store.rotations||undefined,
+    revueDerniere:store.revueDerniere||undefined };
 }
 
 function btPublier(){
@@ -1559,6 +1577,9 @@ async function chargerBacktestsPublies(){
     if(!rien && local && distant && distant<=local) return null;
     store.backtests=o.backtests;
     if(o.pfReport) store.pfReport=o.pfReport;   // rapport portfolio publié avec les backtests
+    if(o.registre) store.registre=o.registre;   // allocation des sets ({} = défauts du code)
+    if(o.rotations) store.rotations=o.rotations;
+    if(o.revueDerniere) store.revueDerniere=o.revueDerniere;
     store.btPublieLe=distant;
     saveStore(store);
     return { nb:o.backtests.length, quand:distant, remplace:!rien };
@@ -2575,13 +2596,15 @@ function renderRotation(){
   el.querySelectorAll('[data-rot-out]').forEach(btn=>btn.addEventListener('click',e=>{
     const m=e.target.dataset.rotOut;
     regBascule(m,'demo','désactivé du réel : DD > 110 % de la référence');
-    renderDemo();
+    lastData?render():renderDemo();
   }));
   el.querySelectorAll('[data-rot-in]').forEach(btn=>btn.addEventListener('click',e=>{
     const m=e.target.dataset.rotIn;
-    if(regParStatut('reel').length>=REEL_MAX){ alert('Déjà '+REEL_MAX+' sets en réel : désactive d\'abord un set.'); return; }
+    if(regParStatut('reel').length>=REEL_MAX){
+      if(!confirm('Tu passes à '+(regParStatut('reel').length+1)+' sets en réel (repère : '+REEL_MAX+'). Confirmer ?')) return;
+    }
     regBascule(m,'reel','promu depuis la démo (conforme + décorrélé)');
-    renderDemo();
+    lastData?render():renderDemo();
   }));
   tag.textContent = urg.length ? 'URGENCE' : (plan.sortants.length||plan.entrants.length) ? 'à trancher à la revue' : 'rien à changer';
   tag.className='tag '+(urg.length?'r':(plan.sortants.length||plan.entrants.length)?'a':'g');
@@ -2684,6 +2707,7 @@ function renderRevue(){
 }
 function renderRegistre(){
   const el=document.getElementById('demoRegistre'); if(!el) return;
+  const nb=document.getElementById('regNb'); if(nb) nb.textContent=SETS_REGISTRY.length;
   const nReel=regParStatut('reel').length;
   let h='<div class="help" style="margin-bottom:8px">'+nReel+'/'+REEL_MAX+' sets en réel · '+regParStatut('demo').length+' en démo · '+regParStatut('off').length+' désactivé(s).</div>'
     +'<div style="overflow:auto"><table style="font-size:12px"><thead><tr><th>Magic</th><th>Set</th><th>Statut</th><th>Depuis</th></tr></thead><tbody>';
@@ -2699,10 +2723,10 @@ function renderRegistre(){
   el.querySelectorAll('[data-reg]').forEach(sel=>sel.addEventListener('change',e=>{
     const m=e.target.dataset.reg, v=e.target.value;
     if(v==='reel' && regStatut(m)!=='reel' && regParStatut('reel').length>=REEL_MAX){
-      alert('Déjà '+REEL_MAX+' sets en réel : désactive d\'abord un set.'); renderRegistre(); return;
+      if(!confirm('Tu passes à '+(regParStatut('reel').length+1)+' sets en réel (repère : '+REEL_MAX+'). Confirmer ?')){ renderRegistre(); return; }
     }
     regBascule(m, v, 'changement manuel dans le registre');
-    renderDemo();
+    lastData?render():renderDemo();   // répercute la bascule sur TOUTE l'app
   }));
 }
 
