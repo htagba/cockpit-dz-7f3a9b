@@ -562,10 +562,12 @@
           <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)">Capital initial ($)
             <input type="number" id="labCapital" style="width:110px;padding:5px 8px"></div>
           <span style="flex:1"></span>
+          <button class="ghost sm" id="labPublier" title="Génère backtests.json (backtests + registre + laboratoire) à déposer sur GitHub : tes autres appareils le chargeront tout seuls">📤 Publier le portfolio</button>
           <button class="ghost sm" id="labPdf">📄 Exporter en PDF</button>
           <button class="ghost sm" id="labHtml">💾 Rapport HTML</button>
           <button class="ghost sm" id="labVider">✕ Vider</button>
         </div>
+        <div class="help" id="labPubMsg" style="display:none;margin-top:8px"></div>
         <div id="labSets" style="margin-top:12px"></div>
       </div>
     </details>
@@ -1575,7 +1577,10 @@ function btPaquet(){
     // Allocation des sets + historique des rotations + cycle de revue :
     // l'appareil qui publie fait foi, les autres s'alignent au chargement.
     registre:store.registre||{}, rotations:store.rotations||undefined,
-    revueDerniere:store.revueDerniere||undefined };
+    revueDerniere:store.revueDerniere||undefined,
+    // Laboratoire « Construction de portfolio » : publié avec le reste pour le
+    // retrouver sur tous les appareils (round-trips compris — le paquet grossit).
+    labo:(store.labo&&store.labo.sets&&store.labo.sets.length)?store.labo:undefined };
 }
 
 function btPublier(){
@@ -1615,6 +1620,7 @@ async function chargerBacktestsPublies(){
     if(o.registre) store.registre=o.registre;   // allocation des sets ({} = défauts du code)
     if(o.rotations) store.rotations=o.rotations;
     if(o.revueDerniere) store.revueDerniere=o.revueDerniere;
+    if(o.labo) store.labo=o.labo;               // laboratoire Construction de portfolio
     store.btPublieLe=distant;
     saveStore(store);
     return { nb:o.backtests.length, quand:distant, remplace:!rien };
@@ -3224,7 +3230,8 @@ document.getElementById('pfFile').addEventListener('change',e=>{ const f=e.targe
    tous les round-trips, les rejoue par ordre chronologique de clôture sur un
    capital unique : le rendement de chaque trade (P&L ÷ solde propre du set,
    × échelle de risque) est appliqué au solde commun, qui compose.
-   Stocké dans store.labo — local au navigateur, jamais publié. */
+   Stocké dans store.labo — et publié avec le paquet backtests.json (bouton
+   « Publier le portfolio ») pour le retrouver sur tous les appareils. */
 store.labo = store.labo || { capital:100000, sets:[] };
 
 function labImportFiles(files){
@@ -3538,6 +3545,13 @@ document.getElementById('labFiles').addEventListener('change',e=>{ labImportFile
 document.getElementById('labCapital').addEventListener('change',e=>{ store.labo.capital=Number(e.target.value)||100000; saveStore(store); renderLab(); });
 document.getElementById('labPdf').addEventListener('click',()=>labExport(true));
 document.getElementById('labHtml').addEventListener('click',()=>labExport(false));
+document.getElementById('labPublier').addEventListener('click',()=>{
+  const msg=document.getElementById('labPubMsg');
+  if(!store.labo.sets.length){ if(msg){ msg.style.display='block'; msg.textContent='Importe d\'abord des rapports : le laboratoire est vide.'; } return; }
+  btPublier();   // même flux que « Publier les backtests » : le paquet inclut le laboratoire
+  if(msg){ msg.style.display='block';
+    msg.innerHTML='✅ <b>backtests.json généré</b> (backtests + registre + laboratoire '+store.labo.sets.length+' sets). Dépose-le sur GitHub <b>à côté de index.html</b> — tes autres appareils retrouveront ce panier et ses stats au prochain rafraîchissement.'; }
+});
 document.getElementById('labVider').addEventListener('click',()=>{
   if(!store.labo.sets.length) return;
   if(confirm('Vider les '+store.labo.sets.length+' rapport(s) du laboratoire ? (n\'affecte pas l\'onglet Backtests)')){
