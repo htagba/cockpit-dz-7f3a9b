@@ -2745,6 +2745,11 @@ function renderRegistre(){
   const nb=document.getElementById('regNb'); if(nb) nb.textContent=SETS_REGISTRY.length;
   const nReel=regParStatut('reel').length;
   let h='<div class="help" style="margin-bottom:8px">'+nReel+'/'+REEL_MAX+' sets en réel · '+regParStatut('demo').length+' en démo · '+regParStatut('off').length+' désactivé(s).</div>'
+    // Bascules groupées (en tête de section) : chaque set changé est historisé.
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
+    +'<button class="ghost sm" data-regtous="reel">Tout passer en réel</button>'
+    +'<button class="ghost sm" data-regtous="demo">Tout passer en démo</button>'
+    +'<button class="ghost sm" data-regtous="off">Tout désactiver</button></div>'
     +'<div style="overflow:auto"><table style="font-size:12px"><thead><tr><th>Magic</th><th>Set</th><th>Statut</th><th>Depuis</th></tr></thead><tbody>';
   SETS_REGISTRY.forEach(r=>{
     const st=regStatut(r.m);
@@ -2754,11 +2759,6 @@ function renderRegistre(){
       +'</select></td><td>'+(regDepuis(r.m)||'—')+'</td></tr>';
   });
   h+='</tbody></table></div>';
-  // Bascules groupées : chaque set réellement changé est historisé individuellement.
-  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
-    +'<button class="ghost sm" data-regtous="reel">Tout passer en réel</button>'
-    +'<button class="ghost sm" data-regtous="demo">Tout passer en démo</button>'
-    +'<button class="ghost sm" data-regtous="off">Tout désactiver</button></div>';
   el.innerHTML=h;
   el.querySelectorAll('[data-reg]').forEach(sel=>sel.addEventListener('change',e=>{
     const m=e.target.dataset.reg, v=e.target.value;
