@@ -681,6 +681,9 @@ function regBascule(m, statut, motif){
   const b=btByMagic(m); if(b) b.included=(statut==='reel');
   saveStore(store);
 }
+/* Rafraîchit TOUTE l'app après une ou plusieurs bascules : cartes des deux
+   onglets (renderBacktests appelle demoCartes) + vues live si données. */
+function regRefresh(){ renderBacktests(lastA); lastData?render():renderDemo(); }
 const regParStatut = st => SETS_REGISTRY.filter(r=>regStatut(r.m)===st);
 // Correspondance magic -> nom (tes renommages manuels restent prioritaires).
 const DEFAULT_SET_NAMES = {};
@@ -2628,7 +2631,7 @@ function renderRotation(){
   el.querySelectorAll('[data-rot-out]').forEach(btn=>btn.addEventListener('click',e=>{
     const m=e.target.dataset.rotOut;
     regBascule(m,'demo','désactivé du réel : DD > 110 % de la référence');
-    lastData?render():renderDemo();
+    regRefresh();
   }));
   el.querySelectorAll('[data-rot-in]').forEach(btn=>btn.addEventListener('click',e=>{
     const m=e.target.dataset.rotIn;
@@ -2636,7 +2639,7 @@ function renderRotation(){
       if(!confirm('Tu passes à '+(regParStatut('reel').length+1)+' sets en réel (repère : '+REEL_MAX+'). Confirmer ?')) return;
     }
     regBascule(m,'reel','promu depuis la démo (conforme + décorrélé)');
-    lastData?render():renderDemo();
+    regRefresh();
   }));
   tag.textContent = urg.length ? 'URGENCE' : (plan.sortants.length||plan.entrants.length) ? 'à trancher à la revue' : 'rien à changer';
   tag.className='tag '+(urg.length?'r':(plan.sortants.length||plan.entrants.length)?'a':'g');
@@ -2751,6 +2754,11 @@ function renderRegistre(){
       +'</select></td><td>'+(regDepuis(r.m)||'—')+'</td></tr>';
   });
   h+='</tbody></table></div>';
+  // Bascules groupées : chaque set réellement changé est historisé individuellement.
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+    +'<button class="ghost sm" data-regtous="reel">Tout passer en réel</button>'
+    +'<button class="ghost sm" data-regtous="demo">Tout passer en démo</button>'
+    +'<button class="ghost sm" data-regtous="off">Tout désactiver</button></div>';
   el.innerHTML=h;
   el.querySelectorAll('[data-reg]').forEach(sel=>sel.addEventListener('change',e=>{
     const m=e.target.dataset.reg, v=e.target.value;
@@ -2758,7 +2766,18 @@ function renderRegistre(){
       if(!confirm('Tu passes à '+(regParStatut('reel').length+1)+' sets en réel (repère : '+REEL_MAX+'). Confirmer ?')){ renderRegistre(); return; }
     }
     regBascule(m, v, 'changement manuel dans le registre');
-    lastData?render():renderDemo();   // répercute la bascule sur TOUTE l'app
+    regRefresh();   // répercute la bascule sur TOUTE l'app (cartes comprises)
+  }));
+  el.querySelectorAll('[data-regtous]').forEach(btn=>btn.addEventListener('click',e=>{
+    const v=e.target.dataset.regtous, lib={reel:'réel',demo:'démo',off:'désactivé'}[v];
+    const aChanger=SETS_REGISTRY.filter(r=>regStatut(r.m)!==v);
+    if(!aChanger.length){ alert('Tous les sets sont déjà en '+lib+'.'); return; }
+    let msg='Passer '+aChanger.length+' set(s) en « '+lib+' » ?';
+    if(v==='reel') msg+=' Tu seras à '+SETS_REGISTRY.length+' sets en réel (repère : '+REEL_MAX+').';
+    if(v==='off') msg+=' Plus aucune carte ne sera affichée dans Backtests ni Compte démo (rien n\'est supprimé).';
+    if(!confirm(msg)) return;
+    aChanger.forEach(r=>regBascule(r.m, v, 'bascule groupée'));
+    regRefresh();
   }));
 }
 
