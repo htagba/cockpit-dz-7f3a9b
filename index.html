@@ -2588,6 +2588,29 @@ function renderRotation(){
 }
 
 /* ---------- revue semestrielle + Telegram ---------- */
+/* Portefeuille global réel vs la référence backtest (rapport QuantAnalyzer de
+   l'onglet Stats historique) : rythme mensuel, trade moyen, réussite et DD
+   comparés aux attendus — pour que la revue soit autoportante. */
+function semestrielGlobalVsBacktest(a2){
+  const L=[];
+  L.push('— PORTEFEUILLE GLOBAL vs BACKTEST (réf. QuantAnalyzer) —');
+  const R=store.pfReport||PF_REPORT, g=R&&R.global;
+  if(!a2||!g){ L.push('  (données indisponibles)'); return L; }
+  const n=a2.closed.length;
+  if(!n){ L.push('  Aucun trade clôturé pour l\'instant.'); return L; }
+  const t0=a2.closed.reduce((m,t)=>t.closeTime&&(!m||t.closeTime<m)?t.closeTime:m,null);
+  const t1=a2.closed.reduce((m,t)=>t.closeTime&&(!m||t.closeTime>m)?t.closeTime:m,null);
+  const mois=(t0&&t1)?Math.max((t1-t0)/2629800000,1/30):null;    // mois de 30,44 j · plancher 1 jour
+  const rythme=mois?a2.realized/mois:null;
+  const tradeMoy=a2.realized/n;
+  const em=(v,ref,tol)=>v>=ref*(1-tol)?'✅':v>=ref*(1-2*tol)?'🟡':'🔴';
+  if(rythme!=null&&g.mthlyAvg) L.push('  '+em(rythme,g.mthlyAvg,0.3)+' Rythme : '+(rythme>=0?'+':'')+fmt(rythme,0)+' $/mois vs ~'+fmt(g.mthlyAvg,0)+' $ attendu ('+fmt(rythme/g.mthlyAvg*100,0)+' %)');
+  L.push('  '+em(tradeMoy,g.avgTrade,0.3)+' Trade moyen : '+(tradeMoy>=0?'+':'')+fmt(tradeMoy,2)+' $ vs '+fmt(g.avgTrade,2)+' $ attendu');
+  L.push('  '+em(a2.winRate,g.winPct,0.1)+' Réussite : '+fmt(a2.winRate,1)+' % vs '+fmt(g.winPct,1)+' % attendu');
+  L.push('  '+(a2.maxDDpct<=g.ddPct?'✅':a2.maxDDpct<=g.ddPct*1.5?'🟡':'🔴')+' DD max : '+fmt(a2.maxDDpct,2)+' % vs '+fmt(g.ddPct,2)+' % de référence backtest');
+  if(n<100) L.push('  ⏳ '+n+' trades clôturés — lecture indicative avant ~100 trades.');
+  return L;
+}
 function rapportSemestrielTexte(){
   const L=[], plan=lastA?planRotation():null;
   const em=s=>({conforme:'✅',surveiller:'🟡',diverge:'🔴',jeune:'⏳',vide:'▫️'}[s]||'▫️');
@@ -2607,6 +2630,8 @@ function rapportSemestrielTexte(){
     });
   };
   bloc('— RÉEL ('+regParStatut('reel').length+' sets) —', lastA, regParStatut('reel'), MIN_TRADES_REEL);
+  L.push('');
+  semestrielGlobalVsBacktest(lastA).forEach(x=>L.push(x));
   L.push('');
   bloc('— DÉMO ('+regParStatut('demo').length+' sets) —', lastADemo, regParStatut('demo'), MIN_TRADES_DEMO);
   L.push('');
