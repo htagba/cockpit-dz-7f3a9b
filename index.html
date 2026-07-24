@@ -380,6 +380,25 @@
       <div id="monthHeat" style="overflow:auto;margin-top:12px"></div>
       <div class="help">Chaque cellule = rendement du mois (vert = positif, rouge = négatif). Aligné sur le scoring DarwinIA, qui note le rendement mois par mois. La source « portefeuille » simule tes backtests (<span id="monthHeatHelpTxt">0,1 %</span> par trade) sur un compte commun — rendement rapporté au solde de début de mois.</div>
     </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>Distribution des durées de trade <span class="tag a" id="durTag">—</span></h3>
+      <div id="durBars" style="position:relative;display:flex;align-items:flex-end;gap:6px;height:130px;margin-top:8px"></div>
+      <div id="durAxis" style="display:flex;gap:6px;margin-top:4px"></div>
+      <div class="help">Temps de détention de tes positions (ouverture → clôture). Compare avec la cadence de tes backtests : un décalage net signale un EA qui ne tient pas ses trades comme prévu (SL/TP touchés trop tôt, exécution différente).</div>
+    </div>
+
+    <div class="grid g2" style="margin-top:14px">
+      <div class="card">
+        <h3>Top 5 trades <span style="font-weight:400;color:var(--dim);font-size:11px">(meilleurs)</span></h3>
+        <table id="topTable"><thead><tr><th>Set</th><th>Symbole</th><th>Clôture</th><th>P&L</th></tr></thead><tbody><tr><td colspan="4" class="empty">Aucune donnée.</td></tr></tbody></table>
+      </div>
+      <div class="card">
+        <h3>Flop 5 trades <span style="font-weight:400;color:var(--dim);font-size:11px">(pires)</span></h3>
+        <table id="flopTable"><thead><tr><th>Set</th><th>Symbole</th><th>Clôture</th><th>P&L</th></tr></thead><tbody><tr><td colspan="4" class="empty">Aucune donnée.</td></tr></tbody></table>
+        <div class="help" id="flopHelp" style="margin-top:8px">Une perte nettement au-dessus des autres = un set qui a pris un risque anormal (gap, slippage, SL non respecté). À investiguer.</div>
+      </div>
+    </div>
   </div>
 
   <!-- BACKTESTS -->
@@ -448,6 +467,12 @@
       <div class="card" style="margin-top:16px">
         <h3>Courbe d'équité <span id="curveSrc" style="font-weight:400;color:var(--dim)"></span></h3>
         <canvas id="equityChart" height="110"></canvas>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h3>Courbe de drawdown <span class="tag a" id="ddCurveTag">—</span></h3>
+        <canvas id="ddChart" height="80"></canvas>
+        <div class="help" id="ddCurveHelp" style="margin-top:8px">Profondeur de ton drawdown à chaque instant (écart au plus haut sommet d'équité atteint). Plus la courbe reste près de 0, mieux c'est ; les longs plongeons rouges = des périodes de récupération. Reconstruit sur les trades clôturés.</div>
       </div>
 
       <div class="card" style="margin-top:14px">
@@ -857,6 +882,10 @@ async function idbSet(k,v){const db=await idb();return new Promise((res,rej)=>{c
 async function idbGet(k){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction('kv','readonly');const rq=t.objectStore('kv').get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error)});}
 
 /* ---------- helpers ---------- */
+/* Échappe le HTML avant injection en innerHTML : les noms de sets (renommés par
+   l'utilisateur), symboles et commentaires viennent de fichiers MT5 -> un
+   commentaire piégé « <img onerror=…> » s'exécuterait sans ce filtre. */
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=(n,d=2)=>Number(n).toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d});
 const money=n=>fmt(n,2)+' $';
 const pct=(n,d=2)=>fmt(n,d)+' %';
@@ -935,8 +964,13 @@ function parseT(v){
 }
 
 /* group key for a set */
-// Trades arrivés sans magic (0) mais identifiables par symbole -> rattachés au bon set.
-const MAGIC0_ALIAS = { 'XAUUSD':'20567', 'EURJPY':'23615' };
+/* Trades sans magic (0) : rattachés par symbole à un vrai magic du registre.
+   Les anciennes valeurs (20567/23615) étaient des magics FANTÔMES absents du
+   registre 1-35 : elles créaient des groupes « Magic 20567 » sans nom ni
+   backtest. Vidé le 24/07/2026 — tous les sets réels exportent leur magic ;
+   un éventuel trade à magic 0 retombe donc proprement sur son commentaire ou
+   son symbole. Pour rattacher un symbole à un set, mets ici { 'XAUUSD':'32' }. */
+const MAGIC0_ALIAS = {};
 function setKey(t){
   const m=t.magic;
   if(m!==undefined&&m!==''&&m!==0&&m!=='0') return 'magic:'+m;
@@ -1091,7 +1125,7 @@ function renderAdvice(a){
   else if(a.curDDpct>=s.ddWarn*0.6) tips.push(['warn','Surveille le drawdown',`${pct(a.curDDpct)} de drawdown. Tu approches du seuil d'alerte (${pct(s.ddWarn,1)}).`]);
   // worst set
   const gs=Object.values(a.groups);
-  if(gs.length){ const worst=gs.slice().sort((x,y)=>(x.pl+x.floating)-(y.pl+y.floating))[0]; const tot=worst.pl+worst.floating; if(tot<0) tips.push(['warn','Set en perte',`« ${setLabel(worst.key)} » pèse ${money(tot)} sur ton compte. Vérifie ses paramètres ou réduis son lot.`]); }
+  if(gs.length){ const worst=gs.slice().sort((x,y)=>(x.pl+x.floating)-(y.pl+y.floating))[0]; const tot=worst.pl+worst.floating; if(tot<0) tips.push(['warn','Set en perte',`« ${esc(setLabel(worst.key))} » pèse ${money(tot)} sur ton compte. Vérifie ses paramètres ou réduis son lot.`]); }
   // calibration
   if(a.closed.length<25||a.days<15) tips.push(['info','Continue la calibration',`Il te manque ${Math.max(25-a.closed.length,0)} trade(s) et ${Math.max(15-a.days,0)} jour(s) pour valider ton DARWIN.`]);
   // dscore
@@ -1119,12 +1153,12 @@ function renderSets(a){
     return `<div class="setcard">
       <div class="top">
         ${mk!=null?`<span style="flex:none;color:var(--muted);font-weight:600;font-size:13px;white-space:nowrap">Magic ${mk} -</span>`:''}
-        <input class="setname" value="${setLabel(g.key).replace(/"/g,'&quot;')}" data-key="${g.key}">
+        <input class="setname" value="${esc(setLabel(g.key))}" data-key="${esc(g.key)}">
         <span class="tag ${cls}">${txt}</span>
       </div>
       <div class="setpl ${tot>=0?'pos':'neg'}">${tot>=0?'+':''}${money(tot)}</div>
       <div class="chips">
-        <span class="chip">${syms||'—'}</span>
+        <span class="chip">${esc(syms)||'—'}</span>
         <span class="chip">${g.closed.length} clôturés</span>
         ${g.open.length?`<span class="chip">${g.open.length} ouverts</span>`:''}
         <span class="chip">DD ${pct(dd,1)}</span>
@@ -1144,7 +1178,7 @@ function renderRiskTab(a){
     const tot=g.pl+g.floating; const dd=setDD(g);
     const share=totalLoss<0&&tot<0?Math.abs(tot/totalLoss*100):0;
     const [cls,txt]=setHealth(g);
-    return `<tr><td>${setLabel(g.key)}</td><td>${g.closed.length}</td><td class="${tot<0?'neg':'pos'}">${money(tot)}</td><td>${pct(dd,1)}</td><td>${share?pct(share,0):'—'}</td><td><span class="tag ${cls}">${txt}</span></td></tr>`;
+    return `<tr><td>${esc(setLabel(g.key))}</td><td>${g.closed.length}</td><td class="${tot<0?'neg':'pos'}">${money(tot)}</td><td>${pct(dd,1)}</td><td>${share?pct(share,0):'—'}</td><td><span class="tag ${cls}">${txt}</span></td></tr>`;
   }).join('');
 }
 
@@ -1228,13 +1262,45 @@ function renderJournal(a){
   // ---- trades table ----
   const tb=document.querySelector('#tradesTable tbody');
   const rows=a.closed.slice().sort((x,y)=>(y.closeTime||0)-(x.closeTime||0));
-  tb.innerHTML=rows.length?rows.map((t,i)=>`<tr><td>${i+1}</td><td>${setLabel(setKey(t))}</td><td>${t.symbol}</td><td>${t.dir||'—'}</td><td>${fmt(t.lots,2)}</td><td>${t.closeTime?t.closeTime.toLocaleString('fr-FR'):'—'}</td><td class="${t.profit>=0?'pos':'neg'}">${t.profit>=0?'+':''}${money(t.profit)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Aucun trade clôturé pour l\'instant.</td></tr>';
+  tb.innerHTML=rows.length?rows.map((t,i)=>`<tr><td>${i+1}</td><td>${esc(setLabel(setKey(t)))}</td><td>${esc(t.symbol)}</td><td>${esc(t.dir)||'—'}</td><td>${fmt(t.lots,2)}</td><td>${t.closeTime?t.closeTime.toLocaleString('fr-FR'):'—'}</td><td class="${t.profit>=0?'pos':'neg'}">${t.profit>=0?'+':''}${money(t.profit)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Aucun trade clôturé pour l\'instant.</td></tr>';
 
   // ---- courbe ----
   let pts=a.curve, src='(depuis les trades clôturés)';
   if(pts.length<=1 && store.equitySnaps.length>1){ pts=store.equitySnaps.map(sn=>({x:new Date(sn.t),y:sn.eq,label:new Date(sn.t).toLocaleString('fr-FR')})); src='(depuis les relevés automatiques)'; }
   document.getElementById('curveSrc').textContent=pts.length>1?src:'';
   drawChart(pts);
+  drawDrawdown(pts);
+}
+
+/* Courbe underwater : drawdown en % à chaque point (écart au pic d'équité). */
+let ddChart=null;
+function drawDrawdown(pts){
+  const ctx=document.getElementById('ddChart'); if(!ctx) return;
+  const tag=document.getElementById('ddCurveTag'), help=document.getElementById('ddCurveHelp');
+  if(help && help.dataset.base===undefined) help.dataset.base=help.innerHTML;
+  if(ddChart){ ddChart.destroy(); ddChart=null; }
+  if(!pts || pts.length<2){ if(tag){tag.textContent='—';tag.className='tag a';} return; }
+  let peak=pts[0].y, maxDD=0, maxDDidx=0;
+  // profondeur de creux courant & plus longue période sous l'eau (en jours)
+  let sousEauDebut=null, plusLongJours=0;
+  const dd=pts.map((p,i)=>{
+    if(p.y>peak){ peak=p.y; if(sousEauDebut!=null){ sousEauDebut=null; } }
+    const d = peak>0 ? (peak-p.y)/peak*100 : 0;
+    if(d>maxDD){ maxDD=d; maxDDidx=i; }
+    if(d>0.001){ if(sousEauDebut==null) sousEauDebut=p.x||i;
+      const j = (p.x&&sousEauDebut instanceof Date)?((p.x-sousEauDebut)/86400000):0;
+      if(j>plusLongJours) plusLongJours=j;
+    }
+    return -round2(d);   // négatif : le creux plonge sous 0
+  });
+  const labels=pts.map((p,i)=>p.label||('#'+i));
+  ddChart=new Chart(ctx,{type:'line',
+    data:{labels,datasets:[{data:dd,borderColor:'#f85149',backgroundColor:'rgba(248,81,73,.14)',fill:true,tension:.15,pointRadius:0,borderWidth:1.5}]},
+    options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'Drawdown : '+fmt(Math.abs(c.parsed.y),2)+' %'}}},
+      scales:{x:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',maxTicksLimit:8}},
+              y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',callback:v=>fmt(Math.abs(v),1)+' %'}}}}});
+  if(tag){ tag.textContent='max '+fmt(maxDD,2)+' %'; tag.className='tag '+(maxDD>=store.settings.ddMax?'r':maxDD>=store.settings.ddWarn?'a':'g'); }
+  if(help) help.innerHTML=help.dataset.base+(plusLongJours>=1?(' <b>Plus longue période sous l\'eau : '+Math.round(plusLongJours)+' jour(s)</b> (temps écoulé sans battre un nouveau sommet).'):'');
 }
 
 function drawChart(pts){
@@ -1397,7 +1463,7 @@ function renderRiskConsistency(a){
   tb.innerHTML=withRisk.sort((x,y)=>(y.t.closeTime||0)-(x.t.closeTime||0)).map(({t,r})=>{
     const dev=r.pct-target; const cls=Math.abs(dev)<=target*0.3?'pos':Math.abs(dev)<=target*0.6?'warn':'neg';
     const arrow=dev>0.0005?'▲':dev<-0.0005?'▼':'●';
-    return `<tr><td>${t.closeTime?t.closeTime.toLocaleDateString('fr-FR'):'ouvert'}</td><td>${setLabel(setKey(t))}</td><td>${t.symbol}</td><td>${fmt(t.lots,2)}</td><td>${fmt(r.usd,2)} $</td><td>${pct(r.pct,3)}</td><td class="${cls}">${arrow} ${pct(Math.abs(dev),3)}</td></tr>`;
+    return `<tr><td>${t.closeTime?t.closeTime.toLocaleDateString('fr-FR'):'ouvert'}</td><td>${esc(setLabel(setKey(t)))}</td><td>${esc(t.symbol)}</td><td>${fmt(t.lots,2)}</td><td>${fmt(r.usd,2)} $</td><td>${pct(r.pct,3)}</td><td class="${cls}">${arrow} ${pct(Math.abs(dev),3)}</td></tr>`;
   }).join('');
 }
 
@@ -1423,7 +1489,7 @@ function computeCorr(a){
 function renderCorrelation(a,c){
   const el=document.getElementById('corrMatrix');
   if(c.keys.length<2){el.innerHTML='<div class="empty">Il faut au moins 2 sets ayant tradé pour calculer une corrélation.</div>';return;}
-  let html='<div style="overflow:auto"><table style="text-align:center;font-size:13px"><thead><tr><th></th>'+c.keys.map(k=>`<th style="text-align:center">${setLabel(k)}</th>`).join('')+'</tr></thead><tbody>';
+  let html='<div style="overflow:auto"><table style="text-align:center;font-size:13px"><thead><tr><th></th>'+c.keys.map(k=>`<th style="text-align:center">${esc(setLabel(k))}</th>`).join('')+'</tr></thead><tbody>';
   c.keys.forEach(k1=>{
     html+='<tr><td style="text-align:left;font-weight:500">'+setLabel(k1)+'</td>';
     c.keys.forEach(k2=>{
@@ -1436,7 +1502,7 @@ function renderCorrelation(a,c){
   });
   html+='</tbody></table></div>';
   let notes='';
-  if(c.overlaps.length) notes+='<div class="alert warn" style="margin-top:10px"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div>'+c.overlaps.map(o=>`« ${setLabel(o[0])} » et « ${setLabel(o[1])} » tradent le même symbole (${o[2].join(', ')}) — risque de redondance.`).join('<br>')+'</div></div>';
+  if(c.overlaps.length) notes+='<div class="alert warn" style="margin-top:10px"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div>'+c.overlaps.map(o=>`« ${esc(setLabel(o[0]))} » et « ${esc(setLabel(o[1]))} » tradent le même symbole (${esc(o[2].join(', '))}) — risque de redondance.`).join('<br>')+'</div></div>';
   if(c.dates.length<3) notes+='<div class="help" style="margin-top:8px">⚠ Seulement '+c.dates.length+' jour(s) commun(s) — la corrélation se fiabilisera avec plus de trades.</div>';
   el.innerHTML=html+notes;
 }
@@ -1522,6 +1588,44 @@ function renderAnalyse(a){
         `<div style="flex:1;display:flex;align-items:flex-start;justify-content:center;width:100%">${neg}</div></div>`;
     }).join('');
   ha.innerHTML=hours.map((v,h)=>`<div style="flex:1;text-align:center;font-size:9px;color:var(--dim)">${h%3===0?h:''}</div>`).join('');
+  renderTradeDuration(a);
+  renderTopFlop(a);
+}
+
+/* Distribution des durées de détention (ouverture -> clôture), en tranches. */
+const DUR_BINS=[
+  {max:1/24, lab:'<1h'}, {max:4/24, lab:'1-4h'}, {max:12/24, lab:'4-12h'},
+  {max:1, lab:'12-24h'}, {max:3, lab:'1-3j'}, {max:7, lab:'3-7j'}, {max:Infinity, lab:'>7j'}
+];
+function renderTradeDuration(a){
+  const hb=document.getElementById('durBars'), ha=document.getElementById('durAxis'), tag=document.getElementById('durTag');
+  if(!hb) return;
+  const durs=a.closed.filter(t=>t.openTime&&t.closeTime).map(t=>(t.closeTime-t.openTime)/86400000).filter(d=>d>=0);
+  if(!durs.length){ hb.innerHTML='<div class="empty" style="width:100%">Aucun trade clôturé avec dates d\'ouverture et de clôture.</div>'; ha.innerHTML=''; tag.textContent='—'; tag.className='tag a'; return; }
+  const bins=DUR_BINS.map(()=>0);
+  durs.forEach(d=>{ for(let i=0;i<DUR_BINS.length;i++){ if(d<DUR_BINS[i].max){ bins[i]++; break; } } });
+  const maxN=Math.max(...bins,1);
+  hb.innerHTML=bins.map((n,i)=>{
+    const h=Math.max(n/maxN*100,n?3:0);
+    return `<div title="${DUR_BINS[i].lab} : ${n} trade(s)" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%">`
+      +`<div style="font-size:10px;color:var(--muted);margin-bottom:3px">${n||''}</div>`
+      +`<div style="width:72%;height:${h}%;background:var(--accent);border-radius:4px 4px 0 0"></div></div>`;
+  }).join('');
+  ha.innerHTML=DUR_BINS.map(b=>`<div style="flex:1;text-align:center;font-size:10px;color:var(--dim)">${b.lab}</div>`).join('');
+  const med=durs.slice().sort((x,y)=>x-y)[Math.floor(durs.length/2)];
+  const medTxt = med<1/24?Math.round(med*1440)+' min' : med<1?fmt(med*24,1)+' h' : fmt(med,1)+' j';
+  tag.textContent='médiane '+medTxt; tag.className='tag a';
+}
+
+/* Top 5 / Flop 5 trades clôturés par P&L. */
+function renderTopFlop(a){
+  const tt=document.querySelector('#topTable tbody'), ft=document.querySelector('#flopTable tbody');
+  if(!tt||!ft) return;
+  const sorted=a.closed.slice().sort((x,y)=>y.profit-x.profit);
+  const ligne=t=>`<tr><td>${esc(setLabel(setKey(t)))}</td><td>${esc(t.symbol)}</td><td>${t.closeTime?t.closeTime.toLocaleDateString('fr-FR'):'—'}</td><td class="${t.profit>=0?'pos':'neg'}">${t.profit>=0?'+':''}${money(t.profit)}</td></tr>`;
+  const top=sorted.slice(0,5), flop=sorted.slice(-5).reverse();
+  tt.innerHTML=top.length?top.map(ligne).join(''):'<tr><td colspan="4" class="empty">Aucune donnée.</td></tr>';
+  ft.innerHTML=flop.length?flop.map(ligne).join(''):'<tr><td colspan="4" class="empty">Aucune donnée.</td></tr>';
 }
 
 /* ---------- Backtests tab: import MT5, courbes, portefeuille combiné, comparaison live ---------- */
