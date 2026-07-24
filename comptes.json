@@ -1,0 +1,14 @@
+{
+ "comptes": [
+  {
+   "id": "nomad-sniper",
+   "nom": "Nomad EA + Swing Sniper",
+   "fichier": "data.json"
+  },
+  {
+   "id": "only-nomad",
+   "nom": "Only Nomad EA",
+   "fichier": "data-only-nomad.json"
+  }
+ ]
+}
