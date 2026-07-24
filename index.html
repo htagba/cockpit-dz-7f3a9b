@@ -213,6 +213,19 @@
 
     <div class="grid g2" style="margin-top:14px">
       <div class="card">
+        <div style="font-size:12px;color:var(--muted)">Transactions gagnantes</div>
+        <div id="wrNum" style="font-size:24px;font-weight:700;margin-top:2px">—</div>
+        <div style="display:flex;justify-content:center;padding:6px 0 2px"><div style="width:185px;height:185px;position:relative"><canvas id="wrDonut"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div style="font-size:12px;color:var(--muted)">Nombre d'actifs négociés</div>
+        <div id="symNum" style="font-size:24px;font-weight:700;margin-top:2px">—</div>
+        <div style="display:flex;justify-content:center;padding:6px 0 2px"><div style="width:185px;height:185px;position:relative"><canvas id="symDonut"></canvas></div></div>
+      </div>
+    </div>
+
+    <div class="grid g2" style="margin-top:14px">
+      <div class="card">
         <h3>Phase de calibration (création du DARWIN)</h3>
         <div style="margin-bottom:14px">
           <div class="meta" style="margin:0 0 6px"><span>Trades clôturés</span><span id="calTradesTxt">0 / 25</span></div>
@@ -987,12 +1000,39 @@ function render(){
   cvMap=buildCvMap(a.closed);
   store.settings.balance=Math.round(a.balance);
   document.getElementById('setBalance').value=Math.round(a.balance);
-  renderTop(a); renderDD(a); renderScore(a); renderCalibration(a); renderAdvice(a);
+  renderTop(a); renderDonuts(a); renderDD(a); renderScore(a); renderCalibration(a); renderAdvice(a);
   renderSets(a); renderRiskTab(a); renderJournal(a); renderDarwinTab(a); renderAnalyse(a);
   renderHeat(a); renderMonthHeat(a); renderControle(a);
   lastA=a; renderBtCompare(a); renderStale(); renderDemo();
 }
 
+/* Cadrans du Cockpit (style Darwinex) : anneau winrate (gagnantes/perdantes,
+   trades clôturés) et anneau de répartition des trades par actif négocié. */
+function renderDonuts(a){
+  const cvW=document.getElementById('wrDonut'), cvS=document.getElementById('symDonut');
+  if(!cvW||!cvS) return;
+  const donut=(cv,labels,data,colors,tip)=>{
+    if(cv._chart){ cv._chart.destroy(); cv._chart=null; }
+    cv._chart=new Chart(cv,{type:'doughnut',
+      data:{labels,datasets:[{data,backgroundColor:colors,borderColor:'#161b22',borderWidth:2}]},
+      options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:tip}}}}});
+  };
+  const nC=a.wins+a.losses;
+  document.getElementById('wrNum').textContent=nC?fmt(a.winRate,2)+' %':'—';
+  if(nC) donut(cvW,['Gagnantes','Perdantes'],[a.wins,a.losses],['#a3e635','#f85149'],
+    c=>' '+c.label+' : '+fmt(c.parsed/nC*100,2)+' % ('+c.parsed+' trade'+(c.parsed>1?'s':'')+')');
+  else donut(cvW,['Aucun trade clôturé'],[1],['#1c2129'],c=>' '+c.label);
+  const parSym={};
+  a.trades.forEach(t=>{ const s=t.symbol||'?'; parSym[s]=(parSym[s]||0)+1; });
+  const entries=Object.entries(parSym).sort((x,y)=>y[1]-x[1]);
+  document.getElementById('symNum').textContent=entries.length||'—';
+  const PAL=['#f4691e','#e2551b','#c74619','#a83c17','#8a3315','#fb923c','#a855f7','#7c6df2','#388bfd','#2ea043','#d29922','#d4537e','#1d9e75','#85b7eb'];
+  const tot=a.trades.length||1;
+  if(entries.length) donut(cvS,entries.map(e=>e[0]),entries.map(e=>e[1]),entries.map((_,i)=>PAL[i%PAL.length]),
+    c=>' '+c.label+' : '+fmt(c.parsed/tot*100,2)+' % ('+c.parsed+' trade'+(c.parsed>1?'s':'')+')');
+  else donut(cvS,['Aucun trade'],[1],['#1c2129'],c=>' '+c.label);
+}
 function renderTop(a){
   const ds=estimateDScore(a);
   const cards=[
