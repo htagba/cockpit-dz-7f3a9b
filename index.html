@@ -521,7 +521,7 @@
     <details class="card" data-sect="demoRot" style="margin-top:14px" open>
       <summary><h3>Rotation réel ↔ démo <span class="tag a" id="demoRotTag">—</span></h3></summary>
       <div class="sect-body">
-        <div class="help" style="margin-bottom:10px">Règles validées : un set réel sort si son drawdown dépasse <b>110 %</b> de sa référence backtest (<b>130 %</b> = urgence, sans attendre la revue). Un set démo est promouvable s'il est <b>conforme</b> à son backtest (≥ 20 trades) et <b>décorrélé</b> des sets réels (corrélation &lt; 0,3 idéale, &lt; 0,6 acceptable faute de mieux — mesurée sur les P&amp;L quotidiens des backtests). Le plafond de sets en réel dépend du compte actif (21 pour le compte 1, 27 pour le compte 2).</div>
+        <div class="help" style="margin-bottom:10px">Règles validées : un set réel sort si son drawdown dépasse <b>110 %</b> de sa référence backtest (<b>130 %</b> = urgence, sans attendre la revue). Un set démo est promouvable s'il est <b>conforme</b> à son backtest (≥ 20 trades) et <b>décorrélé</b> des sets réels (corrélation &lt; 0,3 idéale, &lt; 0,6 acceptable faute de mieux — mesurée sur les P&amp;L quotidiens des backtests). Le plafond de sets en réel dépend du compte actif (27 avec les Swing sniper, 21 pour Only Nomad).</div>
         <div id="demoRotation"><div class="empty">En attente des données.</div></div>
       </div>
     </details>
@@ -687,8 +687,9 @@ const SETS_REGISTRY = [
   {m:34, n:"Dolt MultiStrategy - Slot 8 - XAUUSD H1 - B",a:"slot8"},
   {m:35, n:"APEX EA AUDUSD H1 7.0"}
 ];
-/* Plafond de sets en réel, PAR COMPTE : compte 1 = 21 · compte 2+ = 27. */
-function reelMax(){ return compteIdx()>=1 ? 27 : 21; }
+/* Plafond de sets en réel, PAR COMPTE :
+   compte 1 « Nomad EA + Swing Sniper » = 27 · compte 2 « Only Nomad EA » = 21. */
+function reelMax(){ return compteIdx()>=1 ? 21 : 27; }
 const normNom = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const regEntree = m => SETS_REGISTRY.find(r=>r.m===Number(m)) || null;
 const regNom = m => { const r=regEntree(m); return r ? r.n : ('Magic '+m); };
@@ -696,11 +697,11 @@ const regNom = m => { const r=regEntree(m); return r ? r.n : ('Magic '+m); };
    compte actif ; les bascules sont déclarées dans l'app et historisées. */
 function regStatut(m){ const o=(store.registre||{})[String(m)]; return o ? o.statut : statutDefaut(Number(m)); }
 /* Allocation par défaut PAR COMPTE (juillet 2026) :
-   compte 1 « Only Nomad » : 1-20 & 35 réel · 21-34 démo (21 sets réels)
-   compte 2+              : 1-26 & 35 réel · 27-34 démo (27 sets, Swing sniper inclus) */
+   compte 1 « Nomad EA + Swing Sniper » : 1-26 & 35 réel · 27-34 démo (27 sets)
+   compte 2 « Only Nomad EA »           : 1-20 & 35 réel · 21-34 démo (21 sets) */
 function statutDefaut(m){
   if(m>=27&&m<=34) return 'demo';
-  if(m>=21&&m<=26) return compteIdx()>=1?'reel':'demo';
+  if(m>=21&&m<=26) return compteIdx()>=1?'demo':'reel';
   return 'reel';
 }
 function regDepuis(m){ const o=(store.registre||{})[String(m)]; return o ? o.depuis : null; }
