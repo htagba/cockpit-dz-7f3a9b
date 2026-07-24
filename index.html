@@ -1351,11 +1351,12 @@ function renderAnalyse(a){
   const aw=winR.length?winR.reduce((s,v)=>s+v,0)/winR.length:0;
   const al=lossR.length?lossR.reduce((s,v)=>s+v,0)/lossR.length:0;
   document.getElementById('expStats').innerHTML=[
+    {lab:'Taux de réussite',val:closed.length?pct(winRate,1):'—',cls:winRate>=50?'pos':winRate>=45?'warn':'neg',sub:closed.length?(wins.length+' G / '+losses.length+' P sur '+closed.length+' clôturés'):''},
     {lab:'Espérance / trade',val:expR===null?'—':(expR>=0?'+':'')+fmt(expR,2)+' R',cls:expR>=0?'pos':'neg'},
     {lab:'Espérance / trade ($)',val:(expUsd>=0?'+':'')+money(expUsd),cls:expUsd>=0?'pos':'neg'},
     {lab:'Gain moyen',val:'+'+fmt(aw,2)+' R',cls:'pos'},
     {lab:'Perte moyenne',val:fmt(al,2)+' R',cls:'neg'}
-  ].map(c=>`<div class="stat"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}">${c.val}</div></div>`).join('');
+  ].map(c=>`<div class="stat"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}">${c.val}</div>${c.sub?`<div class="help">${c.sub}</div>`:''}</div>`).join('');
   const tag=document.getElementById('expTag');
   if(expR===null){tag.textContent='—';tag.className='tag a';}
   else{tag.textContent=expR>=0.1?'positive':expR>=0?'fragile':'négative';tag.className='tag '+(expR>=0.1?'g':expR>=0?'a':'r');}
