@@ -757,7 +757,7 @@ if(!store.majAlignInclus){
    code (registre, semestriel, sparkline…) fonctionne sans modification. */
 var COMPTES=[{id:'principal', nom:'Compte réel', fichier:null}];   // fichier null = DATA_ENDPOINT
 var compteActifId=store.compteActif||'principal';
-const PROFIL_CHAMPS=['registre','rotations','revueDerniere','equitySnaps','pfReport'];
+const PROFIL_CHAMPS=['registre','rotations','revueDerniere','equitySnaps','pfReport','labo'];
 // `var` + garde : statutDefaut() peut être appelé (migrations) avant ce bloc.
 function compteIdx(){ if(!COMPTES) return 0; const i=COMPTES.findIndex(c=>c.id===compteActifId); return i<0?0:i; }
 function compteNom(){ return (COMPTES[compteIdx()]||{}).nom||'Compte réel'; }
@@ -775,6 +775,7 @@ function profilMonter(id){
   const p=(store.parCompte||{})[id]||{};
   PROFIL_CHAMPS.forEach(k=>{ store[k]=p[k]; });
   store.registre=store.registre||{}; store.equitySnaps=store.equitySnaps||[];
+  store.labo=store.labo||{capital:100000,sets:[]};
 }
 /* Migration : les champs historiques (mono-compte) deviennent le profil du compte actif. */
 if(!store.parCompteV1){ profilRanger(); store.parCompteV1=true; saveStore(store); }
@@ -789,6 +790,7 @@ function changerCompte(id){
   if(SERVER_MODE) fetchData(); else if(fileHandle) readHandle();
   renderDemo(); renderBacktests(lastA);
   renderPortfolio();   // le rapport QA est PAR compte : l'onglet Stats historique doit suivre
+  renderLab();         // le laboratoire aussi : chaque compte a son panier
 }
 function renderCompteSel(){
   const sel=document.getElementById('compteSel'); if(!sel) return;
@@ -1660,10 +1662,8 @@ function btPaquet(){
     // l'appareil qui publie fait foi, les autres s'alignent au chargement.
     registre:store.registre||{}, rotations:store.rotations||undefined,
     revueDerniere:store.revueDerniere||undefined,
-    // Laboratoire « Construction de portfolio » : publié avec le reste pour le
-    // retrouver sur tous les appareils (round-trips compris — le paquet grossit).
-    labo:(store.labo&&store.labo.sets&&store.labo.sets.length)?store.labo:undefined,
-    // Profils PAR COMPTE (multi-comptes) : le profil actif est figé juste avant.
+    // Profils PAR COMPTE (registre, rapport QA, laboratoire… — le profil actif
+    // est figé juste avant). Le laboratoire de chaque compte voyage ici.
     parCompte:(profilRanger(), store.parCompte)||undefined };
 }
 
@@ -1705,7 +1705,7 @@ async function chargerBacktestsPublies(){
       let maj=false;
       if(o.labo && !(store.labo&&store.labo.sets&&store.labo.sets.length)){ store.labo=o.labo; maj=true; }
       if(o.pfReport && !store.pfReport){ store.pfReport=o.pfReport; maj=true; }
-      if(maj) saveStore(store);
+      if(maj){ profilRanger(); saveStore(store); }   // range dans le profil du compte actif
       return null;
     }
     store.backtests=o.backtests;
@@ -1713,11 +1713,13 @@ async function chargerBacktestsPublies(){
     if(o.registre) store.registre=o.registre;   // allocation des sets ({} = défauts du code)
     if(o.rotations) store.rotations=o.rotations;
     if(o.revueDerniere) store.revueDerniere=o.revueDerniere;
-    if(o.labo) store.labo=o.labo;               // laboratoire Construction de portfolio
     if(o.parCompte){                            // profils multi-comptes : fusion,
       store.parCompte=Object.assign({}, store.parCompte, o.parCompte);   // le publieur fait foi
       profilMonter(compteActifId);              // remonte le profil du compte actif LOCAL
     }
+    // Anciens paquets : laboratoire encore partagé (hors profils). On l'adopte
+    // seulement si le profil monté n'en a pas, puis on le range dans le profil.
+    if(o.labo && !(store.labo&&store.labo.sets&&store.labo.sets.length)){ store.labo=o.labo; profilRanger(); }
     store.btPublieLe=distant;
     saveStore(store);
     return { nb:o.backtests.length, quand:distant, remplace:!rien };
@@ -3329,8 +3331,8 @@ document.getElementById('pfFile').addEventListener('change',e=>{ const f=e.targe
    tous les round-trips, les rejoue par ordre chronologique de clôture sur un
    capital unique : le rendement de chaque trade (P&L ÷ solde propre du set,
    × échelle de risque) est appliqué au solde commun, qui compose.
-   Stocké dans store.labo — et publié avec le paquet backtests.json (bouton
-   « Publier le portfolio ») pour le retrouver sur tous les appareils. */
+   PAR COMPTE : store.labo est un champ de profil (monté/démonté au changement
+   de compte) et voyage dans le paquet backtests.json via parCompte. */
 store.labo = store.labo || { capital:100000, sets:[] };
 
 function labImportFiles(files){
