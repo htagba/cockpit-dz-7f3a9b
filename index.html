@@ -264,6 +264,13 @@
     </div>
 
     <div class="card" style="margin-top:14px">
+      <h3>Stabilité du risque <span style="font-weight:400;color:var(--dim);font-size:11px">(D-Leverage estimé)</span> <span class="tag a" id="dlevTag">—</span></h3>
+      <div class="grid g4" id="dlevStats" style="margin-bottom:10px"></div>
+      <canvas id="dlevChart" height="90"></canvas>
+      <div class="help" id="dlevHelp" style="margin-top:8px">Le <b>D-Leverage</b> mesure le risque d'exposition d'un compte : ici estimé comme <b>somme des expositions notionnelles des positions ouvertes ÷ solde</b>, rejouée dans le temps depuis ton historique (lots × prix d'entrée × valeur du contrat). Darwinex récompense un D-Leverage <b>stable</b> : tu risques la même chose à chaque fois — fie-toi surtout à la <b>forme de la courbe et au CV</b>, pas à la valeur absolue. Darwinex <b>nette les positions corrélées</b> (ex. « −EUR/USD, +NZD/USD ») alors que cette estimation les additionne : elle lit donc généralement un peu plus haut que le chiffre officiel. Proxy transparent, pas la métrique propriétaire exacte.</div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
       <h3>Consistance du risque <span class="tag a" id="riskConsTag">—</span></h3>
       <div class="grid g3" id="riskConsStats" style="margin-bottom:6px"></div>
       <div class="bar" style="margin-top:4px"><span id="riskConsBar" style="width:0%;background:var(--green)"></span></div>
@@ -1275,7 +1282,90 @@ function tradeRisk(t, balance){
   return {usd, pct: balance>0?usd/balance*100:0};
 }
 
-function renderDarwinTab(a){ const c=computeCorr(a); renderRiskConsistency(a); renderCorrelation(a,c); renderDarwinIA(a,c); }
+function renderDarwinTab(a){ const c=computeCorr(a); renderDLeverage(a); renderRiskConsistency(a); renderCorrelation(a,c); renderDarwinIA(a,c); }
+
+/* ---------- D-Leverage estimé (« Stabilité du risque » à la Darwinex) ----------
+   Reconstruit l'exposition notionnelle du compte dans le temps : chaque position
+   ajoute (lots × prix d'entrée × valeur du contrat) de son ouverture à sa clôture,
+   et on divise par le solde reconstitué à cet instant. Le graphe en escalier
+   montre l'évolution ; l'écart-type relatif (CV) juge la STABILITÉ. Ce n'est pas
+   le D-Leverage propriétaire exact — c'est un proxy transparent, comme le DScore. */
+function computeDLeverage(a){
+  const cvOf = t => (cvMap && cvMap[t.symbol]) || contractValue(t.symbol, t.openPrice);
+  const notional = t => {
+    if(t.openPrice==null || !t.lots) return null;
+    const cv=cvOf(t); if(cv==null||!isFinite(cv)) return null;
+    return Math.abs(t.openPrice * t.lots * cv);
+  };
+  const dep = a.dep || a.balance || 100000;
+  const now = Date.now();
+  // P&L réalisé cumulé -> solde a chaque instant (recherche binaire).
+  const closes = a.closed.filter(t=>t.closeTime).map(t=>({t:t.closeTime.getTime(), p:t.profit})).sort((x,y)=>x.t-y.t);
+  let acc=0; const cumClose=closes.map(c=>{ acc+=c.p; return {t:c.t, acc}; });
+  const realizedAt = ts => { let lo=0,hi=cumClose.length-1,res=0; while(lo<=hi){ const mid=(lo+hi)>>1; if(cumClose[mid].t<=ts){res=cumClose[mid].acc;lo=mid+1;}else hi=mid-1;} return res; };
+  // Événements +/- exposition. Les positions ouvertes courent jusqu'à maintenant.
+  const evs=[]; let couverts=0, ignores=0, expoNow=0;
+  a.trades.forEach(t=>{
+    if(!t.openTime) return;
+    const n=notional(t);
+    if(n==null){ ignores++; return; }
+    couverts++;
+    evs.push({t:t.openTime.getTime(), d:+n});
+    if(t.open){ expoNow+=n; } else if(t.closeTime){ evs.push({t:t.closeTime.getTime(), d:-n}); }
+  });
+  if(!evs.length) return {vide:true, couverts, ignores};
+  evs.sort((x,y)=> x.t-y.t);
+  let cum=0; const labels=[], serie=[], segs=[]; let prevT=null;
+  for(let i=0;i<evs.length;i++){
+    cum+=evs[i].d;
+    if(i+1<evs.length && evs[i+1].t===evs[i].t) continue;   // 1 point par timestamp
+    const bal=dep+realizedAt(evs[i].t);
+    const dLev=bal>0?Math.max(cum/bal,0):0;
+    if(prevT!=null) segs.push({x:serie[serie.length-1], w:Math.max(evs[i].t-prevT,0)});
+    labels.push(new Date(evs[i].t).toLocaleDateString('fr-FR'));
+    serie.push(round2(dLev)); prevT=evs[i].t;
+  }
+  // Segment final jusqu'à maintenant (positions encore ouvertes = palier plat).
+  if(expoNow>0 && prevT!=null){ segs.push({x:serie[serie.length-1], w:Math.max(now-prevT,0)});
+    labels.push(new Date(now).toLocaleDateString('fr-FR')); serie.push(serie[serie.length-1]); }
+  // Stabilité : moyenne et écart-type PONDÉRÉS par le temps, sur les paliers > 0.
+  const actifs=segs.filter(s=>s.x>0); const wTot=actifs.reduce((s,x)=>s+x.w,0)||1;
+  const moy=actifs.reduce((s,x)=>s+x.x*x.w,0)/wTot;
+  const varc=actifs.reduce((s,x)=>s+x.w*(x.x-moy)*(x.x-moy),0)/wTot;
+  const cv=moy>0?Math.sqrt(varc)/moy:null;
+  const max=serie.length?Math.max(...serie):0;
+  const actuel=a.balance>0?expoNow/a.balance:0;
+  return {couverts, ignores, labels, serie, moy, max, cv, actuel, expoNow, aOuvert:expoNow>0};
+}
+function renderDLeverage(a){
+  const el=document.getElementById('dlevStats'), tag=document.getElementById('dlevTag'), help=document.getElementById('dlevHelp');
+  const cv2=document.getElementById('dlevChart'); if(!el) return;
+  const r=computeDLeverage(a);
+  const rm=()=>{ if(cv2._chart){ cv2._chart.destroy(); cv2._chart=null; } };
+  if(!r || r.vide){
+    el.innerHTML=''; rm(); tag.textContent='—'; tag.className='tag a';
+    el.innerHTML='<div class="empty" style="grid-column:1/-1">Pas encore de position exploitable (il faut le prix d\'entrée et le volume dans l\'export).</div>';
+    return;
+  }
+  const stab = r.cv==null ? null : (r.cv<0.35?'stable':r.cv<0.7?'variable':'instable');
+  tag.textContent = stab==null?'—':stab; tag.className='tag '+(stab==='stable'?'g':stab==='variable'?'a':stab==='instable'?'r':'a');
+  el.innerHTML=[
+    {lab:'D-Leverage actuel', val:fmt(r.actuel,2), cls:r.aOuvert?'':'', sub:r.aOuvert?'positions ouvertes':'aucune position ouverte'},
+    {lab:'Moyenne (pondérée temps)', val:fmt(r.moy,2), sub:'quand des positions sont ouvertes'},
+    {lab:'Maximum atteint', val:fmt(r.max,2), cls:r.max>=1?'warn':'', sub:'pic d\'exposition'},
+    {lab:'Stabilité (CV)', val:r.cv==null?'—':fmt(r.cv*100,0)+' %', cls:stab==='stable'?'pos':stab==='instable'?'neg':'warn', sub:'plus c\'est bas, mieux c\'est'}
+  ].map(statHTML).join('');
+  rm();
+  cv2._chart=new Chart(cv2,{type:'line',
+    data:{labels:r.labels, datasets:[{data:r.serie, borderColor:'#a3e635', backgroundColor:'rgba(163,230,53,.12)', fill:true, stepped:true, pointRadius:0, borderWidth:1.6}]},
+    options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'D-Leverage : '+fmt(c.parsed.y,2)}}},
+      scales:{x:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',maxTicksLimit:8}},
+              y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675'},beginAtZero:true}}}});
+  if(help){
+    if(help.dataset.base===undefined) help.dataset.base=help.innerHTML;   // texte de base figé une fois
+    help.innerHTML=help.dataset.base + (r.ignores?('<br>⚠ '+r.ignores+' trade(s) sans prix d\'entrée exploitable ont été ignorés du calcul.'):'');
+  }
+}
 
 function renderRiskConsistency(a){
   const target=riskCible();
