@@ -788,6 +788,7 @@ function changerCompte(id){
   renderCompteSel();
   if(SERVER_MODE) fetchData(); else if(fileHandle) readHandle();
   renderDemo(); renderBacktests(lastA);
+  renderPortfolio();   // le rapport QA est PAR compte : l'onglet Stats historique doit suivre
 }
 function renderCompteSel(){
   const sel=document.getElementById('compteSel'); if(!sel) return;
