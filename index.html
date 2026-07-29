@@ -403,7 +403,7 @@
 
   <!-- BACKTESTS -->
   <div class="view" id="v-backtests">
-    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Importe le rapport HTML de backtest de chaque set (MT5 Strategy Tester). Tous les backtests sont générés à <b>0,1 % du solde par trade</b> — le même money management que ton compte réel : les chiffres se lisent tels quels, sans mise à l'échelle. Chaque set a sa carte : courbe d'équité et statistiques clés.</div></div>
+    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Importe le rapport HTML de backtest de chaque set (MT5 Strategy Tester). Cette bibliothèque est <b>propre au compte affiché</b>. Les backtests doivent être générés à <b><span id="btIntroRisk">0,1 %</span> du solde par trade</b> — le même money management que ce compte : les chiffres se lisent tels quels, sans mise à l'échelle. Chaque set a sa carte : courbe d'équité et statistiques clés.</div></div>
 
     <div class="alert warn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div>Ton risque est passé à <b id="btRegenRisk">0,1 %</b>/trade. Régénère tes backtests MT5 à ce risque puis réimporte-les : tant que ce n'est pas fait, les comparaisons live ↔ backtest et la projection restent approximatives.</div></div>
 
@@ -420,7 +420,7 @@
     </div>
 
     <details class="card" data-sect="btList" id="btListWrap" style="margin-top:14px" open>
-      <summary><h3>Chaque set : courbe &amp; statistiques <span style="font-weight:400;color:var(--dim);font-size:11px">(0,1 % du solde par trade)</span></h3></summary>
+      <summary><h3>Chaque set : courbe &amp; statistiques <span style="font-weight:400;color:var(--dim);font-size:11px">(<span id="btListRisk">0,1 %</span> du solde par trade)</span></h3></summary>
       <div class="sect-body">
         <div id="btList"></div>
       </div>
@@ -450,7 +450,7 @@
             <option value="sincelive">Depuis le live</option>
           </select>
           <select id="btNorm" style="width:auto">
-            <option value="raw">% réels (0,1 %)</option>
+            <option value="raw" id="btNormRawOpt">% réels</option>
             <option value="base100">Base 100 (forme)</option>
           </select>
         </div>
@@ -502,7 +502,7 @@
   <!-- CONTRÔLE LIVE -->
   <div class="view" id="v-controle">
     <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Ces quatre contrôles répondent à une seule question : <b>ton live tient-il la promesse du backtest ?</b> Ils s'appuient sur l'appariement <b>magic number → backtest</b> que tu renseignes dans l'onglet « Backtests ». Tant que l'échantillon est trop petit, l'app annonce le nombre de trades manquants au lieu d'un verdict — pour ne pas couper un EA sur du bruit.</div></div>
-    <div class="help" style="margin-bottom:4px"><b>D'où viennent les références ?</b> De <b>tes backtests</b>, générés à <b>0,1 % du solde par trade</b> — exactement le money management du live : aucune mise à l'échelle. Le rendement de chaque trade est mesuré sur le solde courant du backtest (gains composés), et la limite réelle de <b>20 lots</b> du compte est modélisée dans la projection.</div>
+    <div class="help" style="margin-bottom:4px"><b>D'où viennent les références ?</b> De <b>tes backtests</b>, générés à <b><span id="btRefRisk">0,1 %</span> du solde par trade</b> — exactement le money management du live : aucune mise à l'échelle. Le rendement de chaque trade est mesuré sur le solde courant du backtest (gains composés), et la limite réelle de <b>20 lots</b> du compte est modélisée dans la projection.</div>
 
     <details class="card" data-sect="ctrlAvis" style="margin-top:14px" open>
       <summary><h3>Conseils de gestion du portefeuille <span class="tag a" id="ctrlAvisTag">—</span></h3></summary>
@@ -515,7 +515,7 @@
     <details class="card" data-sect="ctrlDiv" style="margin-top:14px" open>
       <summary><h3>Divergence live vs backtest <span class="tag a" id="ctrlDivTag">—</span></h3></summary>
       <div class="sect-body">
-        <div class="help" style="margin-bottom:10px">Pour chaque set : ce que fait ton live contre ce que promet son backtest — tous deux à 0,1 % du solde par trade. Le verdict s'appuie sur un test statistique (z sur le taux de réussite, t sur l'espérance) — pas sur un simple écart brut.</div>
+        <div class="help" style="margin-bottom:10px">Pour chaque set : ce que fait ton live contre ce que promet son backtest — tous deux à <span id="ctrlDivRisk">0,1 %</span> du solde par trade. Le verdict s'appuie sur un test statistique (z sur le taux de réussite, t sur l'espérance) — pas sur un simple écart brut.</div>
         <div id="ctrlDiv"><div class="empty">En attente de trades live et de backtests importés.</div></div>
       </div>
     </details>
@@ -943,6 +943,11 @@ function majLibellesRisque(){
   set('monthHeatBtOpt', 'Portefeuille backtest ('+riskTxt()+')');
   set('monthHeatHelpTxt', riskTxt());
   set('btRegenRisk', riskTxt());
+  set('btNormRawOpt', '% réels ('+riskTxt()+')');   // risque PAR COMPTE : ne pas figer 0,1 %
+  set('btIntroRisk', riskTxt());
+  set('btListRisk', riskTxt());
+  set('btRefRisk', riskTxt());
+  set('ctrlDivRisk', riskTxt());
 }
 const pick=(o,keys)=>{for(const k of keys){if(o[k]!==undefined&&o[k]!==null&&o[k]!=='')return o[k];}return undefined;};
 
@@ -2020,7 +2025,7 @@ function renderBacktests(a){
     renderBtCorr(); renderBtCompare(a); if(a) renderControle(a); reserveCartes(); return;
   }
   const wrap=document.getElementById('btListWrap'); if(wrap) wrap.style.display='block';
-  if(tb){ tb.style.display='flex'; cnt.textContent=bts.length+' set(s) réel(s)'+(nDemo?' · '+nDemo+' en réserve (section dédiée)':'')+(nOff?' · '+nOff+' masqué(s)':'')+' · 0,1 % du solde par trade'; }
+  if(tb){ tb.style.display='flex'; cnt.textContent=bts.length+' set(s) réel(s)'+(nDemo?' · '+nDemo+' en réserve (section dédiée)':'')+(nOff?' · '+nOff+' masqué(s)':'')+' · '+riskTxt()+' du solde par trade'; }
   if(!bts.length){
     list.innerHTML='<div class="empty">Aucun backtest de set réel. Les cartes des sets en réserve sont dans la section « Sets en réserve » ci-dessous ; bascule un set en réel dans le registre pour voir sa carte ici.</div>';
     renderBtCorr(); renderBtCompare(a); if(a) renderControle(a); reserveCartes(); return;
@@ -2080,7 +2085,7 @@ function btCartesRender(list, bts, aRef, modeDemo){
       else { const ld=liveDD[mg].dd, over=ld>s.maxDDpct; cmp='DD live : <b class="'+(over?'neg':'pos')+'">'+pct(ld,2)+'</b> &nbsp;·&nbsp; réf. backtest : <b>'+pct(s.maxDDpct,2)+'</b> &nbsp;·&nbsp; '+(over?'🔴 dépasse la réf.':'🟢 sous la réf.'); }
       return '<div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;font-size:12.5px"><label style="font-size:12px;color:var(--muted);margin:0">Set live (magic) :</label><input type="number" class="bt-magic" data-id="'+b.id+'" value="'+mg+'" placeholder="—" style="width:88px;padding:5px 8px"><span style="flex:1;min-width:220px">'+cmp+'</span></div>';
     })()}
-    <div class="help" style="margin-top:8px">${b.symbol||''}${b.period?(' · '+b.period):''} · dépôt ${money(dep)} · risque 0,1 % du solde par trade</div>
+    <div class="help" style="margin-top:8px">${esc(b.symbol)||''}${b.period?(' · '+esc(b.period)):''} · dépôt ${money(dep)} · risque ${riskTxt()} du solde par trade</div>
   </div>`; }).join('');
   // courbe de chaque set : solde rejoué au trade près, en % du dépôt (même 0,1 % que le live)
   bts.forEach(b=>{
