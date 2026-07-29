@@ -722,7 +722,9 @@ const SETS_REGISTRY = [
 ];
 /* Plafond de sets en réel, PAR COMPTE :
    compte 1 « Nomad EA + Swing Sniper » = 27 · compte 2 « Only Nomad EA » = 21. */
-function reelMax(){ return compteIdx()>=1 ? 21 : 27; }
+/* Plus de plafond : le nombre de sets en réel est libre, compte par compte.
+   (Conservé comme simple repère informatif dans quelques textes.) */
+function reelMax(){ return regParStatut('reel').length; }
 const normNom = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const regEntree = m => SETS_REGISTRY.find(r=>r.m===Number(m)) || null;
 const regNom = m => { const r=regEntree(m); return r ? r.n : ('Magic '+m); };
@@ -793,7 +795,7 @@ var compteActifId=store.compteActif||'principal';
 /* 'compteNum' = numéro MT5 vu la dernière fois pour CE compte : il doit être dans
    le profil, sinon basculer d'un compte à l'autre passerait pour un changement
    de compte et purgerait l'historique d'équité à chaque bascule. */
-const PROFIL_CHAMPS=['registre','rotations','revueDerniere','equitySnaps','pfReport','labo','compteNum'];
+const PROFIL_CHAMPS=['registre','rotations','revueDerniere','equitySnaps','pfReport','labo','compteNum','backtests','settings'];
 // `var` + garde : statutDefaut() peut être appelé (migrations) avant ce bloc.
 function compteIdx(){ if(!COMPTES) return 0; const i=COMPTES.findIndex(c=>c.id===compteActifId); return i<0?0:i; }
 function compteNom(){ return (COMPTES[compteIdx()]||{}).nom||'Compte réel'; }
@@ -812,9 +814,44 @@ function profilMonter(id){
   PROFIL_CHAMPS.forEach(k=>{ store[k]=p[k]; });
   store.registre=store.registre||{}; store.equitySnaps=store.equitySnaps||[];
   store.labo=store.labo||{capital:100000,sets:[]};
+  store.backtests=store.backtests||[];   // chaque compte a SES backtests
+  // …et SES réglages (risque par trade, seuils de drawdown, solde de référence).
+  store.settings=store.settings||{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10};
 }
 /* Migration : les champs historiques (mono-compte) deviennent le profil du compte actif. */
 if(!store.parCompteV1){ profilRanger(); store.parCompteV1=true; saveStore(store); }
+/* Migration (29/07/2026) : les backtests étaient PARTAGÉS entre les comptes. Ils
+   appartiennent désormais au profil de chaque compte — on les attribue au compte
+   affiché au moment de la mise à jour ; les autres comptes repartent d'une
+   bibliothèque vide, à remplir avec leurs propres rapports. */
+if(!store.backtestsParCompte){
+  store.parCompte=store.parCompte||{};
+  const p=store.parCompte[compteActifId]=store.parCompte[compteActifId]||{};
+  if(!Array.isArray(p.backtests)) p.backtests=store.backtests||[];
+  store.backtestsParCompte=true; saveStore(store);
+}
+/* Migration (29/07/2026) : les réglages (risque/trade, seuils DD, solde) étaient
+   PARTAGÉS. Chaque compte a maintenant les siens — on recopie les réglages
+   actuels dans TOUS les profils connus pour ne rien perdre ; il suffit ensuite
+   d'ajuster le risque compte par compte dans l'onglet « Garde-fou risque ». */
+if(!store.settingsParCompte){
+  store.parCompte=store.parCompte||{};
+  const s0=store.settings||{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10};
+  store.parCompte[compteActifId]=store.parCompte[compteActifId]||{};
+  Object.keys(store.parCompte).forEach(id=>{
+    const p=store.parCompte[id];
+    if(!p.settings) p.settings=JSON.parse(JSON.stringify(s0));
+  });
+  store.settingsParCompte=true; saveStore(store);
+}
+/* Recopie les réglages du compte monté dans les champs du Garde-fou et rafraîchit
+   les libellés « x % du solde par trade » qui en dépendent partout dans l'app. */
+function majChampsReglages(){
+  const v=(id,val)=>{ const el=document.getElementById(id); if(el&&document.activeElement!==el) el.value=val; };
+  v('setRiskPct', store.settings.riskPct); v('setDdWarn', store.settings.ddWarn); v('setDdMax', store.settings.ddMax);
+  if(store.settings.balance!=null) v('setBalance', Math.round(store.settings.balance));
+  if(typeof majLibellesRisque==='function') majLibellesRisque();
+}
 function changerCompte(id){
   if(id===compteActifId||!COMPTES.some(c=>c.id===id)) return;
   profilRanger();
@@ -822,7 +859,7 @@ function changerCompte(id){
   profilMonter(id); saveStore(store);
   lastData=null; lastA=null;
   const al=document.getElementById('acctLine'); if(al) al.textContent=compteNom()+' — chargement…';
-  renderCompteSel();
+  renderCompteSel(); majChampsReglages();   // le risque/trade est PAR compte
   if(SERVER_MODE) fetchData(); else if(fileHandle) readHandle();
   renderRegistreTab(); renderBacktests(lastA);
   renderPortfolio();   // le rapport QA est PAR compte : l'onglet Stats historique doit suivre
@@ -1875,22 +1912,33 @@ function autoMagic(name){
    il ne voit jamais ces rapports. */
 
 function btPaquet(){
-  if(!store.backtests || !store.backtests.length) throw new Error('aucun backtest à publier');
-  return { publieLe:new Date().toISOString(), nb:store.backtests.length,
-    // Réglages de risque de l'app : le veilleur/rapport les liront ici comme
-    // source de vérité (une seule saisie, dans l'app). Voir apply_reglages().
-    reglages:{ riskPct:riskCible(), ddWarn:Number(store.settings.ddWarn)||6, ddMax:Number(store.settings.ddMax)||10 },
-    backtests:store.backtests,
+  profilRanger();                       // fige le profil actif AVANT de lire les profils
+  const parCompte=store.parCompte||{};
+  /* Les champs RACINE (backtests, reglages, registre…) sont ceux du PREMIER
+     compte — celui dont le VPS publie data.json. C'est cette référence que
+     lisent le rapport mensuel et le veilleur (Python) ; les publier depuis le
+     compte affiché fausserait leurs comparaisons dès qu'on publie en étant sur
+     un autre compte. Les autres comptes voyagent dans parCompte. */
+  const idRef=(COMPTES[0]||{}).id||compteActifId;
+  const pRef=parCompte[idRef]||{};
+  const btRef=Array.isArray(pRef.backtests)?pRef.backtests:(store.backtests||[]);
+  const sRef=pRef.settings||store.settings||{};
+  const aucun=!Object.values(parCompte).some(p=>(p.backtests||[]).length) && !(store.backtests||[]).length;
+  if(aucun) throw new Error('aucun backtest à publier');
+  return { publieLe:new Date().toISOString(), nb:btRef.length,
+    // Réglages de risque du compte de référence : le veilleur/rapport les liront
+    // ici comme source de vérité (une seule saisie, dans l'app). Voir apply_reglages().
+    reglages:{ riskPct:Number(sRef.riskPct)||0.1, ddWarn:Number(sRef.ddWarn)||6, ddMax:Number(sRef.ddMax)||10 },
+    backtests:btRef,
     // Rapport portfolio QuantAnalyzer importé (s'il existe) : il voyage avec la
     // publication pour que les autres appareils l'affichent aussi.
-    pfReport:store.pfReport||undefined,
+    pfReport:pRef.pfReport||undefined,
     // Allocation des sets + historique des rotations + cycle de revue :
     // l'appareil qui publie fait foi, les autres s'alignent au chargement.
-    registre:store.registre||{}, rotations:store.rotations||undefined,
-    revueDerniere:store.revueDerniere||undefined,
-    // Profils PAR COMPTE (registre, rapport QA, laboratoire… — le profil actif
-    // est figé juste avant). Le laboratoire de chaque compte voyage ici.
-    parCompte:(profilRanger(), store.parCompte)||undefined };
+    registre:pRef.registre||{}, rotations:pRef.rotations||undefined,
+    revueDerniere:pRef.revueDerniere||undefined,
+    // Profils PAR COMPTE : backtests, registre, rapport QA, laboratoire, réglages.
+    parCompte };
 }
 
 function btPublier(){
@@ -2862,8 +2910,7 @@ function planRotation(aOverride){
   });
   // Sans compte démo, plus de candidats « conformes sur données live » : la
   // promotion d'un set de réserve se décide à la main dans le registre.
-  const placesLibres=Math.max(0, reelMax() - reels.length + sortants.length);
-  return {sortants, entrants:[], placesLibres, nReel:reels.length, nDemo:reserve.length};
+  return {sortants, entrants:[], placesLibres:null, nReel:reels.length, nDemo:reserve.length};
 }
 
 /* ---------- rendus de l'onglet Registre & revue ---------- */
@@ -2930,7 +2977,7 @@ function rapportSemestrielTexte(){
   const em=s=>({conforme:'✅',surveiller:'🟡',diverge:'🔴',jeune:'⏳',vide:'▫️'}[s]||'▫️');
   L.push('📊 REVUE SEMESTRIELLE — Cockpit Darwinex Zero');
   if(COMPTES.length>1) L.push('Compte : '+compteNom());
-  L.push(new Date().toLocaleDateString('fr-FR')+' · risque '+riskTxt()+'/trade · max '+reelMax()+' sets en réel');
+  L.push(new Date().toLocaleDateString('fr-FR')+' · risque '+riskTxt()+'/trade · '+regParStatut('reel').length+' sets en réel');
   L.push('');
   const bloc=(titre, a2, sets, minN)=>{
     L.push(titre);
@@ -2956,7 +3003,6 @@ function rapportSemestrielTexte(){
   L.push('— ALERTES DE DRAWDOWN —');
   if(plan && plan.sortants.length){
     plan.sortants.forEach(s=>L.push('  ⬇️ Retirer du réel '+s.nom+' (DD '+fmt(s.dd,1)+' % = '+fmt(s.dd/s.ref*100,0)+' % de la réf'+(s.urgence?' — URGENCE':'')+')'));
-    L.push('  ('+plan.placesLibres+' place(s) libre(s) sur '+reelMax()+')');
   } else L.push('  Aucune : on ne touche à rien.');
   const dern=store.revueDerniere;
   const rots=(store.rotations||[]).filter(r=>!dern||r.date>dern);
@@ -3003,7 +3049,7 @@ function renderRegistre(){
   const el=document.getElementById('demoRegistre'); if(!el) return;
   const nb=document.getElementById('regNb'); if(nb) nb.textContent=SETS_REGISTRY.length;
   const nReel=regParStatut('reel').length;
-  let h='<div class="help" style="margin-bottom:8px">'+nReel+'/'+reelMax()+' sets en réel · '+regParStatut('demo').length+' en réserve · '+regParStatut('off').length+' désactivé(s).</div>'
+  let h='<div class="help" style="margin-bottom:8px">'+nReel+' set(s) en réel · '+regParStatut('demo').length+' en réserve · '+regParStatut('off').length+' désactivé(s) — compte « '+esc(compteNom())+' ».</div>'
     // Bascules groupées (en tête de section) : chaque set changé est historisé.
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
     +'<button class="ghost sm" data-regtous="reel">Tout passer en réel</button>'
@@ -3021,9 +3067,6 @@ function renderRegistre(){
   el.innerHTML=h;
   el.querySelectorAll('[data-reg]').forEach(sel=>sel.addEventListener('change',e=>{
     const m=e.target.dataset.reg, v=e.target.value;
-    if(v==='reel' && regStatut(m)!=='reel' && regParStatut('reel').length>=reelMax()){
-      if(!confirm('Tu passes à '+(regParStatut('reel').length+1)+' sets en réel (repère : '+reelMax()+'). Confirmer ?')){ renderRegistre(); return; }
-    }
     regBascule(m, v, 'changement manuel dans le registre');
     regRefresh();   // répercute la bascule sur TOUTE l'app (cartes comprises)
   }));
@@ -3032,7 +3075,7 @@ function renderRegistre(){
     const aChanger=SETS_REGISTRY.filter(r=>regStatut(r.m)!==v);
     if(!aChanger.length){ alert('Tous les sets sont déjà en '+lib+'.'); return; }
     let msg='Passer '+aChanger.length+' set(s) en « '+lib+' » ?';
-    if(v==='reel') msg+=' Tu seras à '+SETS_REGISTRY.length+' sets en réel (repère : '+reelMax()+').';
+    if(v==='reel') msg+=' Tu seras à '+SETS_REGISTRY.length+' sets en réel.';
     if(v==='off') msg+=' Plus aucune carte de backtest ne sera affichée (rien n\'est supprimé).';
     if(!confirm(msg)) return;
     aChanger.forEach(r=>regBascule(r.m, v, 'bascule groupée'));
@@ -3137,8 +3180,9 @@ document.getElementById('calcSym').addEventListener('change',e=>{const d={forex:
 document.getElementById('saveRisk').addEventListener('click',()=>{
   // Object.assign : ne PAS écraser d'éventuels réglages absents de ce formulaire.
   store.settings=Object.assign({}, store.settings, {balance:Number(document.getElementById('setBalance').value)||100000,riskPct:Number(document.getElementById('setRiskPct').value)||0.1,ddWarn:Number(document.getElementById('setDdWarn').value)||6,ddMax:Number(document.getElementById('setDdMax').value)||10});
+  profilRanger();   // les réglages appartiennent au profil du compte affiché
   // renderBacktests : les cartes affichent le risque cible, render() ne les redessine pas.
-  saveStore(store); render(); majLibellesRisque(); renderBacktests(lastA); flash('Paramètres enregistrés');
+  saveStore(store); render(); majLibellesRisque(); renderBacktests(lastA); flash('Paramètres enregistrés du compte « '+compteNom()+' »');
 });
 function flash(msg){const el=document.getElementById('syncTxt');const p=document.getElementById('syncPill');p.style.display='';el.textContent=msg;setTimeout(()=>updateSyncLabel(),2500);}
 
@@ -3262,10 +3306,7 @@ document.getElementById('btnRefresh').addEventListener('click',()=>{ if(SERVER_M
     }catch(e){}
   }
   // fill settings inputs
-  document.getElementById('setRiskPct').value=store.settings.riskPct;
-  document.getElementById('setDdWarn').value=store.settings.ddWarn;
-  document.getElementById('setDdMax').value=store.settings.ddMax;
-  majLibellesRisque();
+  majChampsReglages();
   calcLot();
   initSections();
   // Backtests publiés : à charger AVANT le premier rendu, sinon l'onglet
