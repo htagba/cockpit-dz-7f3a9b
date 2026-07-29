@@ -3136,7 +3136,8 @@ function renderRegistre(){
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
     +'<button class="ghost sm" data-regtous="reel">Tout passer en réel</button>'
     +'<button class="ghost sm" data-regtous="demo">Tout passer en réserve</button>'
-    +'<button class="ghost sm" data-regtous="off">Tout désactiver</button></div>'
+    +'<button class="ghost sm" data-regtous="off">Tout désactiver</button>'
+    +'<button class="ghost sm" id="regRebuild" title="Remplace la liste de ce compte par les seuls sets présents dans SES backtests et SES trades">🔄 Reconstruire depuis mes backtests</button></div>'
     // Ajout manuel d'un set (les sets vus dans les backtests/trades s'ajoutent seuls).
     +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'
     +'<input type="number" id="regAddM" placeholder="magic" style="width:90px;padding:5px 8px">'
@@ -3159,6 +3160,18 @@ function renderRegistre(){
     const n=(el.querySelector('#regAddN')||{}).value||'';
     if(!isFinite(m)||m<=0){ alert('Renseigne un numéro de magic valide.'); return; }
     if(!setAjouter(m,n,true)){ alert('Le magic '+m+' est déjà dans la liste de ce compte.'); return; }
+    saveStore(store); regRefresh();
+  });
+  const bReb=el.querySelector('#regRebuild');
+  if(bReb) bReb.addEventListener('click',()=>{
+    // Compte ce qui serait retenu AVANT de vider, pour prévenir honnêtement.
+    const vus=new Set();
+    (store.backtests||[]).forEach(b=>{ const m=btMagic(b); if(m!=='') vus.add(String(m)); });
+    if(lastA&&lastA.groups) Object.keys(lastA.groups).forEach(k=>{ if(k.indexOf('magic:')===0) vus.add(k.slice(6)); });
+    if(!vus.size){ alert('Aucun set détecté : importe d\'abord les backtests de ce compte (ou attends ses premiers trades).'); return; }
+    if(!confirm('Reconstruire la liste du compte « '+compteNom()+' » ?\n\nElle ne contiendra plus que les '+vus.size+' set(s) présents dans ses backtests et ses trades.\nLes statuts (réel / réserve / désactivé) des sets conservés restent en place ; rien n\'est supprimé côté backtests.')) return;
+    store.sets=[]; store.setsRetires=[];
+    registreAutoEtendre(lastA);
     saveStore(store); regRefresh();
   });
   el.querySelectorAll('[data-regdel]').forEach(btn=>btn.addEventListener('click',e=>{
