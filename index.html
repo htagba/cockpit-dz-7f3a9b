@@ -790,7 +790,10 @@ if(!store.majAlignInclus){
    code (registre, semestriel, sparkline…) fonctionne sans modification. */
 var COMPTES=[{id:'principal', nom:'Compte réel', fichier:null}];   // fichier null = DATA_ENDPOINT
 var compteActifId=store.compteActif||'principal';
-const PROFIL_CHAMPS=['registre','rotations','revueDerniere','equitySnaps','pfReport','labo'];
+/* 'compteNum' = numéro MT5 vu la dernière fois pour CE compte : il doit être dans
+   le profil, sinon basculer d'un compte à l'autre passerait pour un changement
+   de compte et purgerait l'historique d'équité à chaque bascule. */
+const PROFIL_CHAMPS=['registre','rotations','revueDerniere','equitySnaps','pfReport','labo','compteNum'];
 // `var` + garde : statutDefaut() peut être appelé (migrations) avant ce bloc.
 function compteIdx(){ if(!COMPTES) return 0; const i=COMPTES.findIndex(c=>c.id===compteActifId); return i<0?0:i; }
 function compteNom(){ return (COMPTES[compteIdx()]||{}).nom||'Compte réel'; }
@@ -3172,6 +3175,18 @@ setInterval(function(){ try{ renderStale(); }catch(e){} }, 60000);
 /* ---------- file reading ---------- */
 function ingest(data){
   lastData=data;
+  /* Changement de compte MT5 sur le MÊME emplacement (compte fermé puis rouvert) :
+     l'historique d'équité du compte précédent n'a plus rien à voir avec le nouveau.
+     On le purge dès qu'on voit un autre numéro de compte, sinon la courbe du
+     Journal démarrerait sur les relevés d'un compte disparu. */
+  const numLu=String(data.account||'');
+  if(numLu){
+    if(store.compteNum && store.compteNum!==numLu && (store.equitySnaps||[]).length){
+      console.info('Nouveau compte MT5 ('+store.compteNum+' → '+numLu+') : historique d\'équité réinitialisé.');
+      store.equitySnaps=[];
+    }
+    if(store.compteNum!==numLu){ store.compteNum=numLu; profilRanger(); saveStore(store); }
+  }
   const a=analyze(data);
   const snap={t:Date.now(),eq:Math.round(a.equity)};
   const last=store.equitySnaps[store.equitySnaps.length-1];
