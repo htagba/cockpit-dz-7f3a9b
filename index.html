@@ -725,8 +725,14 @@ const SETS_REGISTRY = [
 /* Plus de plafond : le nombre de sets en réel est libre, compte par compte.
    (Conservé comme simple repère informatif dans quelques textes.) */
 function reelMax(){ return regParStatut('reel').length; }
+/* ---- Liste des sets DU COMPTE AFFICHÉ ----
+   SETS_REGISTRY est le catalogue de base (35 sets, « Tous les sets.xlsx »).
+   Chaque compte en garde SA copie dans store.sets : on peut y ajouter des sets
+   (autres EA, autres magics) ou en retirer, sans toucher à l'autre compte.
+   Repli sur le catalogue tant qu'aucun profil n'est monté. */
+function setsActifs(){ return Array.isArray(store.sets) ? store.sets : SETS_REGISTRY; }
 const normNom = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-const regEntree = m => SETS_REGISTRY.find(r=>r.m===Number(m)) || null;
+const regEntree = m => setsActifs().find(r=>r.m===Number(m)) || null;
 const regNom = m => { const r=regEntree(m); return r ? r.n : ('Magic '+m); };
 /* Statut d'un set : 'reel' | 'demo' | 'off'. Le registre monté est celui du
    compte actif ; les bascules sont déclarées dans l'app et historisées. */
@@ -735,6 +741,10 @@ function regStatut(m){ const o=(store.registre||{})[String(m)]; return o ? o.sta
    compte 1 « Nomad EA + Swing Sniper » : 1-26 & 35 réel · 27-34 démo (27 sets)
    compte 2 « Only Nomad EA »           : 1-20 & 35 réel · 21-34 démo (21 sets) */
 function statutDefaut(m){
+  m=Number(m);
+  // Set ajouté hors catalogue de base (autre EA, autre compte) : on le suppose
+  // tradé — on ne l'ajoute au registre que parce qu'il apparaît dans les données.
+  if(!SETS_REGISTRY.some(r=>r.m===m)) return 'reel';
   if(m>=27&&m<=34) return 'demo';
   if(m>=21&&m<=26) return compteIdx()>=1?'demo':'reel';
   return 'reel';
@@ -752,7 +762,44 @@ function regBascule(m, statut, motif){
 /* Rafraîchit TOUTE l'app après une ou plusieurs bascules : cartes réel +
    réserve (renderBacktests appelle reserveCartes) + vues live si données. */
 function regRefresh(){ renderBacktests(lastA); lastData?render():renderRegistreTab(); }
-const regParStatut = st => SETS_REGISTRY.filter(r=>regStatut(r.m)===st);
+const regParStatut = st => setsActifs().filter(r=>regStatut(r.m)===st);
+const setsBase = () => JSON.parse(JSON.stringify(SETS_REGISTRY));
+/* Ajoute un set à la liste du compte (ignore si le magic y est déjà).
+   Un ajout explicite lève l'éventuel retrait mémorisé. */
+function setAjouter(m, nom, manuel){
+  m=Number(m); if(!isFinite(m)) return false;
+  if(!Array.isArray(store.sets)) store.sets=setsBase();
+  if(manuel) store.setsRetires=(store.setsRetires||[]).filter(x=>Number(x)!==m);
+  if(store.sets.some(r=>r.m===m)) return false;
+  store.sets.push({m, n:String(nom||'').trim()||('Magic '+m)});
+  store.sets.sort((a,b)=>a.m-b.m);
+  return true;
+}
+/* Retire un set de la liste du compte et mémorise le retrait, sinon la détection
+   automatique le rajouterait au prochain rendu. */
+function setRetirer(m){
+  m=Number(m);
+  if(!Array.isArray(store.sets)) store.sets=setsBase();
+  const n=store.sets.length;
+  store.sets=store.sets.filter(r=>r.m!==m);
+  if(store.registre) delete store.registre[String(m)];
+  store.setsRetires=store.setsRetires||[];
+  if(!store.setsRetires.some(x=>Number(x)===m)) store.setsRetires.push(m);
+  return store.sets.length!==n;
+}
+/* Complète la liste du compte avec les magics vus dans SES backtests et SES
+   trades live : importer un rapport « Magic 42 - … » fait apparaître le set.
+   Les sets explicitement retirés ne reviennent pas. */
+function registreAutoEtendre(a){
+  const retires=(store.setsRetires||[]).map(Number);
+  const vus=new Map();
+  (store.backtests||[]).forEach(b=>{ const m=btMagic(b); if(m!=null&&!vus.has(String(m))) vus.set(String(m), String(b.name||'').replace(/^\s*magic\s*\d+\s*[-–]?\s*/i,'').trim()); });
+  if(a&&a.groups) Object.keys(a.groups).forEach(k=>{ if(k.indexOf('magic:')===0){ const m=k.slice(6); if(!vus.has(m)) vus.set(m,''); } });
+  let ajout=0;
+  vus.forEach((nom,m)=>{ if(retires.includes(Number(m))) return; if(!regEntree(m) && setAjouter(m, nom)) ajout++; });
+  if(ajout) saveStore(store);
+  return ajout;
+}
 // Correspondance magic -> nom (tes renommages manuels restent prioritaires).
 const DEFAULT_SET_NAMES = {};
 SETS_REGISTRY.forEach(r=>{ DEFAULT_SET_NAMES['magic:'+r.m]=r.n; });
@@ -763,7 +810,10 @@ if(!store.registreV2){
   Object.keys(store.setNames).forEach(k=>{ if(anciens.includes(store.setNames[k])) delete store.setNames[k]; });
   store.registreV2=true; saveStore(store);
 }
-store.setNames = Object.assign({}, DEFAULT_SET_NAMES, store.setNames);
+/* Les noms par défaut ne sont plus recopiés dans store.setNames : setLabel()
+   retombe sur la liste de sets du compte (regNom). setNames ne contient donc
+   que TES renommages, propres à chaque compte. */
+store.setNames = store.setNames || {};
 /* Nouveau compte réel (juillet 2026) : nouvelle répartition (voir statutDefaut())
    et risque abaissé à 0,1 %/trade. On repart des
    statuts par défaut (les bascules de l'ancien compte n'ont plus de sens) et on
@@ -795,7 +845,7 @@ var compteActifId=store.compteActif||'principal';
 /* 'compteNum' = numéro MT5 vu la dernière fois pour CE compte : il doit être dans
    le profil, sinon basculer d'un compte à l'autre passerait pour un changement
    de compte et purgerait l'historique d'équité à chaque bascule. */
-const PROFIL_CHAMPS=['registre','rotations','revueDerniere','equitySnaps','pfReport','labo','compteNum','backtests','settings'];
+const PROFIL_CHAMPS=['registre','rotations','revueDerniere','equitySnaps','pfReport','labo','compteNum','backtests','settings','sets','setNames','setsRetires'];
 // `var` + garde : statutDefaut() peut être appelé (migrations) avant ce bloc.
 function compteIdx(){ if(!COMPTES) return 0; const i=COMPTES.findIndex(c=>c.id===compteActifId); return i<0?0:i; }
 function compteNom(){ return (COMPTES[compteIdx()]||{}).nom||'Compte réel'; }
@@ -815,8 +865,11 @@ function profilMonter(id){
   store.registre=store.registre||{}; store.equitySnaps=store.equitySnaps||[];
   store.labo=store.labo||{capital:100000,sets:[]};
   store.backtests=store.backtests||[];   // chaque compte a SES backtests
-  // …et SES réglages (risque par trade, seuils de drawdown, solde de référence).
+  // …SES réglages (risque par trade, seuils de drawdown, solde de référence)…
   store.settings=store.settings||{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10};
+  // …et SA liste de sets + SES renommages.
+  if(!Array.isArray(store.sets)) store.sets=JSON.parse(JSON.stringify(SETS_REGISTRY));
+  store.setNames=store.setNames||{};
 }
 /* Migration : les champs historiques (mono-compte) deviennent le profil du compte actif. */
 if(!store.parCompteV1){ profilRanger(); store.parCompteV1=true; saveStore(store); }
@@ -843,6 +896,20 @@ if(!store.settingsParCompte){
     if(!p.settings) p.settings=JSON.parse(JSON.stringify(s0));
   });
   store.settingsParCompte=true; saveStore(store);
+}
+/* Migration (29/07/2026) : la LISTE des sets et les NOMS personnalisés deviennent
+   eux aussi propres à chaque compte. Chaque profil connu part d'une copie de
+   l'existant — rien n'est perdu ; ensuite les listes divergent librement. */
+if(!store.setsParCompte){
+  store.parCompte=store.parCompte||{};
+  store.parCompte[compteActifId]=store.parCompte[compteActifId]||{};
+  const base=JSON.stringify(SETS_REGISTRY), noms=JSON.stringify(store.setNames||{});
+  Object.keys(store.parCompte).forEach(id=>{
+    const p=store.parCompte[id];
+    if(!Array.isArray(p.sets)) p.sets=JSON.parse(base);
+    if(!p.setNames) p.setNames=JSON.parse(noms);
+  });
+  store.setsParCompte=true; saveStore(store);
 }
 /* Recopie les réglages du compte monté dans les champs du Garde-fou et rafraîchit
    les libellés « x % du solde par trade » qui en dépendent partout dans l'app. */
@@ -1012,7 +1079,9 @@ function setKey(t){
   if(t.comment) return 'cmt:'+t.comment;
   return 'sym:'+t.symbol;
 }
-function setLabel(key){ if(store.setNames[key])return store.setNames[key]; const v=key.split(':').slice(1).join(':'); if(key.startsWith('magic:'))return 'Magic '+v; if(key.startsWith('cmt:'))return v; return v; }
+/* Nom affiché d'un set : renommage manuel du compte d'abord, sinon le nom de SA
+   liste de sets (regNom), sinon la clé brute. */
+function setLabel(key){ if((store.setNames||{})[key])return store.setNames[key]; const v=key.split(':').slice(1).join(':'); if(key.startsWith('magic:'))return regNom(v); if(key.startsWith('cmt:'))return v; return v; }
 
 /* ---------- core compute ---------- */
 function analyze(data){
@@ -1874,7 +1943,9 @@ function btImportFile(file){
       const ix=store.backtests.findIndex(b=>b.sig&&b.sig===sig);
       if(ix>=0){ entry.included=store.backtests[ix].included; store.backtests[ix]=entry; }  // ré-import : remplace, pas de doublon
       else store.backtests.push(entry);
-      saveStore(store); renderBacktests(lastA);
+      saveStore(store);
+      registreAutoEtendre(lastA);        // un set inconnu entre au registre du compte
+      renderBacktests(lastA); renderRegistre();
     }catch(e){ console.error(e); alert('Erreur de lecture de '+file.name); }
   };
   reader.readAsArrayBuffer(file);
@@ -1903,11 +1974,14 @@ function makeBarChart(cv, labels, data, couleurs, fmtVal){
       plus fiable ; 2) sinon nom du REGISTRE identique/inclus (normalisé) ;
       3) sinon alias distinctif (slot1, gold2hswing…). */
 function autoMagic(name){
-  const pref=String(name||'').match(/^\s*magic\s*(\d{1,2})\b/i);
-  if(pref){ const m=Number(pref[1]); if(regEntree(m)) return m; }
+  // Préfixe « Magic N - … » : on le retient MÊME si le set n'est pas encore au
+  // registre du compte — c'est ce qui permet à registreAutoEtendre() de l'y
+  // ajouter à l'import. Jusqu'à 4 chiffres pour accepter d'autres numérotations.
+  const pref=String(name||'').match(/^\s*magic\s*(\d{1,4})\b/i);
+  if(pref) return Number(pref[1]);
   const k=normNom(name); if(!k) return null;
-  let hit=SETS_REGISTRY.find(r=>{ const rn=normNom(r.n); return rn===k || rn.includes(k) || k.includes(rn); });
-  if(!hit) hit=SETS_REGISTRY.find(r=> r.a && k.includes(r.a));
+  let hit=setsActifs().find(r=>{ const rn=normNom(r.n); return rn===k || rn.includes(k) || k.includes(rn); });
+  if(!hit) hit=setsActifs().find(r=> r.a && k.includes(r.a));
   return hit ? hit.m : null;
 }
 /* ---------- publication / synchronisation des backtests ----------
@@ -3053,24 +3127,45 @@ function renderRevue(){
 }
 function renderRegistre(){
   const el=document.getElementById('demoRegistre'); if(!el) return;
-  const nb=document.getElementById('regNb'); if(nb) nb.textContent=SETS_REGISTRY.length;
+  registreAutoEtendre(lastA);   // sets vus dans les backtests/trades de CE compte
+  const liste=setsActifs();
+  const nb=document.getElementById('regNb'); if(nb) nb.textContent=liste.length;
   const nReel=regParStatut('reel').length;
-  let h='<div class="help" style="margin-bottom:8px">'+nReel+' set(s) en réel · '+regParStatut('demo').length+' en réserve · '+regParStatut('off').length+' désactivé(s) — compte « '+esc(compteNom())+' ».</div>'
+  let h='<div class="help" style="margin-bottom:8px">'+nReel+' set(s) en réel · '+regParStatut('demo').length+' en réserve · '+regParStatut('off').length+' désactivé(s) — liste propre au compte « '+esc(compteNom())+' ».</div>'
     // Bascules groupées (en tête de section) : chaque set changé est historisé.
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
     +'<button class="ghost sm" data-regtous="reel">Tout passer en réel</button>'
     +'<button class="ghost sm" data-regtous="demo">Tout passer en réserve</button>'
     +'<button class="ghost sm" data-regtous="off">Tout désactiver</button></div>'
-    +'<div style="overflow:auto"><table style="font-size:12px"><thead><tr><th>Magic</th><th>Set</th><th>Statut</th><th>Depuis</th></tr></thead><tbody>';
-  SETS_REGISTRY.forEach(r=>{
+    // Ajout manuel d'un set (les sets vus dans les backtests/trades s'ajoutent seuls).
+    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'
+    +'<input type="number" id="regAddM" placeholder="magic" style="width:90px;padding:5px 8px">'
+    +'<input type="text" id="regAddN" placeholder="nom du set" style="flex:1;min-width:180px;padding:5px 8px">'
+    +'<button class="ghost sm" id="regAdd">+ Ajouter un set</button></div>'
+    +'<div style="overflow:auto"><table style="font-size:12px"><thead><tr><th>Magic</th><th>Set</th><th>Statut</th><th>Depuis</th><th></th></tr></thead><tbody>';
+  liste.forEach(r=>{
     const st=regStatut(r.m);
-    h+='<tr><td>'+r.m+'</td><td>'+r.n+'</td>'
+    h+='<tr><td>'+r.m+'</td><td>'+esc(r.n)+'</td>'
       +'<td><select data-reg="'+r.m+'" style="width:auto;padding:4px 8px">'
       +['reel','demo','off'].map(s=>'<option value="'+s+'"'+(s===st?' selected':'')+'>'+({reel:'Réel',demo:'Réserve',off:'Désactivé'}[s])+'</option>').join('')
-      +'</select></td><td>'+(regDepuis(r.m)||'—')+'</td></tr>';
+      +'</select></td><td>'+(regDepuis(r.m)||'—')+'</td>'
+      +'<td><button class="ghost sm" data-regdel="'+r.m+'" title="Retirer ce set de la liste de ce compte">✕</button></td></tr>';
   });
   h+='</tbody></table></div>';
   el.innerHTML=h;
+  const bAdd=el.querySelector('#regAdd');
+  if(bAdd) bAdd.addEventListener('click',()=>{
+    const m=Number((el.querySelector('#regAddM')||{}).value);
+    const n=(el.querySelector('#regAddN')||{}).value||'';
+    if(!isFinite(m)||m<=0){ alert('Renseigne un numéro de magic valide.'); return; }
+    if(!setAjouter(m,n,true)){ alert('Le magic '+m+' est déjà dans la liste de ce compte.'); return; }
+    saveStore(store); regRefresh();
+  });
+  el.querySelectorAll('[data-regdel]').forEach(btn=>btn.addEventListener('click',e=>{
+    const m=e.target.dataset.regdel;
+    if(!confirm('Retirer « '+regNom(m)+' » de la liste du compte « '+compteNom()+' » ?\n\nSon backtest et son historique restent en place ; le set réapparaîtra automatiquement s\'il est encore présent dans tes backtests ou tes trades.')) return;
+    setRetirer(m); saveStore(store); regRefresh();
+  }));
   el.querySelectorAll('[data-reg]').forEach(sel=>sel.addEventListener('change',e=>{
     const m=e.target.dataset.reg, v=e.target.value;
     regBascule(m, v, 'changement manuel dans le registre');
@@ -3078,10 +3173,10 @@ function renderRegistre(){
   }));
   el.querySelectorAll('[data-regtous]').forEach(btn=>btn.addEventListener('click',e=>{
     const v=e.target.dataset.regtous, lib={reel:'réel',demo:'réserve',off:'désactivé'}[v];
-    const aChanger=SETS_REGISTRY.filter(r=>regStatut(r.m)!==v);
+    const aChanger=setsActifs().filter(r=>regStatut(r.m)!==v);
     if(!aChanger.length){ alert('Tous les sets sont déjà en '+lib+'.'); return; }
     let msg='Passer '+aChanger.length+' set(s) en « '+lib+' » ?';
-    if(v==='reel') msg+=' Tu seras à '+SETS_REGISTRY.length+' sets en réel.';
+    if(v==='reel') msg+=' Tu seras à '+setsActifs().length+' sets en réel.';
     if(v==='off') msg+=' Plus aucune carte de backtest ne sera affichée (rien n\'est supprimé).';
     if(!confirm(msg)) return;
     aChanger.forEach(r=>regBascule(r.m, v, 'bascule groupée'));
