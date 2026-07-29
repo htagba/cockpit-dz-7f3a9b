@@ -612,7 +612,7 @@
 
   <!-- STATS HISTORIQUE PORTFOLIO -->
   <div class="view" id="v-portfolio">
-    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Statistiques historiques du <b>portefeuille global</b> réel, issues du rapport <b>QuantAnalyzer</b> à <b>0,1 % du solde par trade</b> (1 lot, plafond 20 lots). La courbe d'équité est reconstituée à partir de la performance mensuelle. Pour mettre à jour ces chiffres, importe simplement le <b>rapport portfolio PDF</b> exporté de QuantAnalyzer.</div></div>
+    <div class="alert info"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><div>Statistiques historiques du <b>portefeuille global</b> réel, issues du rapport <b>QuantAnalyzer</b> à <b><span id="pfIntroRisk">0,1 %</span> du solde par trade</b> (1 lot, plafond 20 lots). La courbe d'équité est reconstituée à partir de la performance mensuelle. Pour mettre à jour ces chiffres, importe simplement le <b>rapport portfolio PDF</b> exporté de QuantAnalyzer.</div></div>
 
     <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
       <button class="ghost sm" id="pfImportBtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Importer le rapport PDF</button>
@@ -948,6 +948,7 @@ function majLibellesRisque(){
   set('btListRisk', riskTxt());
   set('btRefRisk', riskTxt());
   set('ctrlDivRisk', riskTxt());
+  set('pfIntroRisk', riskTxt());
 }
 const pick=(o,keys)=>{for(const k of keys){if(o[k]!==undefined&&o[k]!==null&&o[k]!=='')return o[k];}return undefined;};
 
@@ -2371,7 +2372,7 @@ function btExportPDF(){
     +'.note{font-size:10px;color:#556;background:#f4f5f8;border-radius:6px;padding:8px 10px;margin-top:10px}'
     +'@media print{body{padding:0}tr{break-inside:avoid}}');
   H.push('</style></head><body>');
-  H.push('<h1>Portefeuille de backtests — 0,1 % du solde par trade</h1>');
+  H.push('<h1>Portefeuille de backtests — '+riskTxt()+' du solde par trade</h1>');
   H.push('<div class="meta">Cockpit Darwinex Zero · '+bts.length+' sets · généré le '+new Date().toLocaleString('fr-FR')+'</div>');
   if(sim && sim.dates.length){
     H.push('<h2>Portefeuille combiné (compte commun simulé)</h2>');
@@ -2386,7 +2387,7 @@ function btExportPDF(){
       +'<td class="'+(s.rendementNet>=0?'p':'n')+'">'+pct(s.rendementNet,1)+'</td>'
       +'<td class="n">'+pct(s.maxDDpct,2)+'</td><td>'+(s.pf==null?'—':fmt(s.pf,2))+'</td>'
       +'<td>'+pct(s.winRate,1)+'</td><td>'+pct(s.moisPositifs,0)+'</td></tr>';}).join('')+'</tbody></table>');
-  H.push('<div class="note">Backtests générés à 0,1 % du solde par trade (2020 → aujourd\'hui) — le money management du compte réel (limite 20 lots). Estimations indicatives, pas une garantie de performance future ni un conseil en investissement.</div>');
+  H.push('<div class="note">Backtests générés à '+riskTxt()+' du solde par trade (2020 → aujourd\'hui) — le money management du compte réel (limite 20 lots). Estimations indicatives, pas une garantie de performance future ni un conseil en investissement.</div>');
   H.push('</body></html>');
   const w=window.open('', '_blank');
   if(!w){ alert('La fenêtre du rapport a été bloquée. Autorise les pop-ups pour ce site, puis réessaie.'); return; }
@@ -2430,7 +2431,7 @@ function renderBtCompare(a){
   cv._chart=new Chart(cv,{type:'line',data:{labels,datasets},options:{plugins:{legend:{display:true,labels:{color:'#8b95a5',boxWidth:12}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y}${norm==='base100'?'':' %'}`}}},scales:{x:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',maxTicksLimit:9}},y:{grid:{color:'#222a3a'},ticks:{color:'#5c6675',callback:v=>v+(norm==='base100'?'':' %')}}}}});
   if(!bts.length){ note.textContent = store.backtests.length ? 'Coche au moins un backtest (« portefeuille ») pour le comparer à ton live.' : 'Importe tes backtests ci-dessus pour superposer la référence à ton live.'; return; }
   const lr=live.total||0, br=bt.total||0;
-  const caveat=' Backtests et live au même risque (0,1 % du solde par trade) : les courbes sont directement comparables.';
+  const caveat=' Backtests et live au même risque ('+riskTxt()+' du solde par trade) : les courbes sont directement comparables.';
   if(period==='sincelive'){ const diff=lr-br; note.textContent=`Depuis ${startISO} : live ${pct(lr,2)} vs backtest ${pct(br,2)}.`+caveat; }
   else { note.textContent=`Portefeuille backtesté complet (${labels[0]} → ${labels[labels.length-1]}) : ${pct(br,1)}. Ton live (${pct(lr,2)} depuis ${startISO}) apparaît à droite — c'est normal qu'il soit court au début.`+caveat; }
 }
@@ -2753,7 +2754,7 @@ function renderCtrlDivergence(a){
   h+='</tbody></table></div>';
   const sansMagic=lignes.length-suivis.length;
   if(sansMagic) h+='<div class="help" style="margin-top:8px">'+sansMagic+' set(s) sans magic renseigné, donc non suivis. Complète-les dans l\'onglet « Backtests ».</div>';
-  h+='<div class="help" style="margin-top:4px">Références issues de <b>tes backtests à 0,1 %</b> — le même risque que le live, donc comparaison directe, sans mise à l\'échelle. « Réf. backtest » = nombre de trades du backtest du set. Un verdict n\'est rendu qu\'à partir de 20 trades live ; « diverge » signifie que l\'écart dépasse ce que le hasard explique (~2,5 écarts-types).</div>';
+  h+='<div class="help" style="margin-top:4px">Références issues de <b>tes backtests à '+riskTxt()+'</b> — le même risque que le live, donc comparaison directe, sans mise à l\'échelle. « Réf. backtest » = nombre de trades du backtest du set. Un verdict n\'est rendu qu\'à partir de 20 trades live ; « diverge » signifie que l\'écart dépasse ce que le hasard explique (~2,5 écarts-types).</div>';
   el.innerHTML=h;
   const pires=suivis.map(x=>x.d.statut);
   const st=pires.includes('diverge')?'diverge':pires.includes('surveiller')?'surveiller':pires.some(s=>s==='conforme')?'conforme':'jeune';
@@ -2806,7 +2807,7 @@ function renderCtrlCouts(a){
   const ecartPct=(att&&att.usd!==0)?ecart/Math.abs(att.usd)*100:null;
   el.innerHTML=[
     {lab:'Trade moyen réel', val:money(reelParTrade), cls:reelParTrade>=0?'pos':'neg', sub:c.n+' trades clôturés'},
-    {lab:'Trade moyen attendu', val:att?money(att.usd):'—', sub:att?'backtests à 0,1 % — même risque que le live':'importe tes backtests'},
+    {lab:'Trade moyen attendu', val:att?money(att.usd):'—', sub:att?('backtests à '+riskTxt()+' — même risque que le live'):'importe tes backtests'},
     {lab:'Écart', val:ecart==null?'—':((ecart>=0?'+':'')+money(ecart)), cls:ecart==null?'':(ecart>=0?'pos':'neg'),
      sub:ecartPct==null?'':((ecartPct>=0?'+':'')+fmt(ecartPct,1)+' % vs attendu')},
     {lab:'Coûts explicites / trade', val:money(c.coutParTrade), cls:'neg',
@@ -2856,7 +2857,7 @@ function renderCtrlProjection(a){
     {lab:'Médiane à 12 mois', val:money0(p12.med), cls:p12.med>=p12.eq0?'pos':'neg', sub:'le scénario typique'},
     {lab:'Pire 5 % à 12 mois', val:money0(p12.p05), cls:p12.p05>=p12.eq0?'warn':'neg', sub:'1 scénario sur 20 fait pire'},
     {lab:'Drawdown déjà vécu', val:pct(ddHist,2), cls:ddHist>=p12.ddMax?'neg':'warn',
-     sub:'portefeuille backtesté (0,1 %) · ta limite : '+pct(p12.ddMax,0)}
+     sub:'portefeuille backtesté ('+riskTxt()+') · ta limite : '+pct(p12.ddMax,0)}
   ].map(statHTML).join('');
   let h='<div style="overflow:auto"><table style="font-size:12.5px"><thead><tr>'
     +'<th>Horizon</th><th>Trades attendus</th><th>Pire 5 %</th><th>Médiane</th><th>Meilleur 5 %</th><th>Prob. de perte</th><th>Prob. limite DD</th>'
@@ -2873,7 +2874,7 @@ function renderCtrlProjection(a){
   });
   h+='</tbody></table></div>';
   tab.innerHTML=h;
-  note.innerHTML='Chaque ligne rejoue '+p12.nSim.toLocaleString('fr-FR')+' fois le portefeuille en tirant au hasard, avec remise, dans les trades de <b>tes backtests à 0,1 %</b> — le même risque que le live, sans mise à l\'échelle. '
+  note.innerHTML='Chaque ligne rejoue '+p12.nSim.toLocaleString('fr-FR')+' fois le portefeuille en tirant au hasard, avec remise, dans les trades de <b>tes backtests à '+riskTxt()+'</b> — le même risque que le live, sans mise à l\'échelle. '
     +'Le <b>plafond de 20 lots</b> est modélisé : au-delà de '+money0(p12.cap)+' de solde les positions ne grossissent plus, donc le rendement en % se dilue'
     +(p12.probCap>1?(' — cela arrive dans <b>'+pct(p12.probCap,0)+'</b> des tirages à 12 mois.'):' (pas encore atteint dans les tirages à 12 mois).')+' '
     +'<br>🔴 <b>Ne te fie pas à la probabilité de drawdown.</b> Le tirage traite les trades comme indépendants : il casse les séries de pertes, qui sont précisément ce qui creuse les drawdowns. Il les <b>sous-estime donc lourdement</b>. Le repère qui compte est l\'historique : le portefeuille backtesté (compte commun simulé) a connu <b>'+pct(ddHist,2)+'</b> de drawdown'
@@ -3664,13 +3665,13 @@ function renderLab(){
   let h='<div style="overflow:auto"><table style="font-size:12px"><thead><tr><th>Set</th><th style="text-align:right">Trades</th><th style="text-align:right">Net du rapport</th><th>Risque du rapport</th><th></th></tr></thead><tbody>';
   sets.forEach((e,i)=>{
     const horsEchelle=(tailles[i]>4*med&&med>0);
-    h+='<tr><td>'+(e.magic!=null?('M'+e.magic+' · '):'')+e.nom.replace(/</g,'&lt;')
-      +(horsEchelle?' <span class="tag a" title="La taille moyenne des trades de ce rapport est très supérieure aux autres : il n\'est probablement pas exporté à 0,1 %. Ajuste l\'échelle.">⚠ hors échelle ?</span>':'')+'</td>'
+    h+='<tr><td>'+(e.magic!=null?('M'+e.magic+' · '):'')+esc(e.nom)
+      +(horsEchelle?' <span class="tag a" title="La taille moyenne des trades de ce rapport est très supérieure aux autres : il n\'est probablement pas exporté à '+riskTxt()+'. Ajuste l\'échelle.">⚠ hors échelle ?</span>':'')+'</td>'
       +'<td style="text-align:right">'+e.stats.nbTrades+'</td>'
       +'<td style="text-align:right" class="'+(e.stats.net>=0?'pos':'neg')+'">'+fmt(e.stats.net,0)+' $</td>'
       +'<td><select data-labech="'+e.id+'" style="width:auto;padding:3px 6px">'
-      +'<option value="1"'+(e.echelle===1?' selected':'')+'>0,1 % (tel quel)</option>'
-      +'<option value="0.1"'+(e.echelle===0.1?' selected':'')+'>1 % → ramené ÷10</option>'
+      +'<option value="1"'+(e.echelle===1?' selected':'')+'>'+riskTxt()+' (tel quel)</option>'
+      +'<option value="0.1"'+(e.echelle===0.1?' selected':'')+'>10× le risque → ÷10</option>'
       +'</select></td>'
       +'<td><button class="ghost sm" data-labdel="'+e.id+'">✕</button></td></tr>';
   });
@@ -3705,7 +3706,7 @@ function renderLab(){
       {lab:'MAR',val:g.mar==null?'—':fmt(g.mar,2),sub:'CAGR ÷ DD max'},
       {lab:'Sharpe (mensuel ann.)',val:fmt(g.sharpeM,2),sub:'moy/σ mensuel × √12'},
       {lab:'SQN',val:fmt(g.sqn,2),cls:'pos',sub:'moy/σ des trades × √n'},
-      {lab:'Espérance / trade',val:(g.avgTrade>=0?'+':'')+fmt(g.avgTrade,2)+' $',sub:fmt(g.expectancyR,2)+' R (R = 0,1 % du solde)'},
+      {lab:'Espérance / trade',val:(g.avgTrade>=0?'+':'')+fmt(g.avgTrade,2)+' $',sub:fmt(g.expectancyR,2)+' R (R = '+riskTxt()+' du solde)'},
       {lab:'Gain moyen / mois',val:(g.mthlyAvg>=0?'+':'')+fmt(g.mthlyAvg,0)+' $',sub:(g.yrlyAvg>=0?'+':'')+fmt(g.yrlyAvg,0)+' $ /an'},
       {lab:'Mois positifs',val:d.moisPositifs+' / '+d.moisTotal,cls:'pos',sub:fmt(d.moisPositifs/d.moisTotal*100,1)+' %'}
      ].map(statHTML).join('')+'</div>')
