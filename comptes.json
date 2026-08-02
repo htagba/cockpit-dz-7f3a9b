@@ -9,6 +9,11 @@
    "id": "flowVanguard-smc",
    "nom": "FlowVanguard SMC",
    "fichier": "data.json"
+  },
+  {
+   "id": "SwingSniper",
+   "nom": "Swing Sniper",
+   "fichier": "data.json"
   }
  ]
 }
