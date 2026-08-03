@@ -197,6 +197,13 @@
   <div class="view active" id="v-cockpit">
     <div class="grid g4" id="topStats"></div>
 
+    <div class="card" style="margin-top:14px">
+      <h3>Mois en cours <span style="font-weight:400;color:var(--dim);font-size:11px">(logique DarwinIA : le rendement se juge mois par mois)</span> <span class="tag a" id="mcTag">—</span></h3>
+      <div class="grid g4" id="mcStats"></div>
+      <div id="mcMsg" style="margin-top:10px"></div>
+      <div class="help" id="mcHelp" style="margin-top:8px">DarwinIA note chaque <b>mois calendaire</b> (rendement du mois + mois glissants). La comparaison « au même stade » rejoue le portefeuille backtesté jour par jour : elle dit si ton mois, bon ou mauvais, est <b>normal pour ce portefeuille à ce point du mois</b> — c'est elle qui doit décider, pas l'envie de finir le mois en vert.</div>
+    </div>
+
     <div class="grid g2" style="margin-top:14px">
       <div class="card">
         <h3>Drawdown vs limite de sécurité</h3>
@@ -1268,7 +1275,7 @@ function render(){
   cvMap=buildCvMap(a.closed);
   store.settings.balance=Math.round(a.balance);
   document.getElementById('setBalance').value=Math.round(a.balance);
-  renderTop(a); renderDonuts(a); renderDD(a); renderScore(a); renderCalibration(a); renderAdvice(a);
+  renderTop(a); renderDonuts(a); renderDD(a); renderScore(a); renderCalibration(a); renderAdvice(a); renderMoisCourant(a);
   renderSets(a); renderRiskTab(a); renderPertes(a); renderJournal(a); renderDarwinTab(a); renderAnalyse(a);
   renderHeat(a); renderMonthHeat(a); renderControle(a);
   lastA=a; renderBtCompare(a); renderStale(); renderRegistreTab();
@@ -1367,6 +1374,114 @@ function renderAdvice(a){
   const ic={info:'M12 16v-4M12 8h.01" /><circle cx="12" cy="12" r="10"',ok:'M20 6 9 17l-5-5',warn:'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',danger:'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'};
   document.getElementById('advice').innerHTML=tips.map(([t,h,b])=>`
     <div class="alert ${t}"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="${ic[t]}"/></svg><div><b>${h}.</b> ${b}</div></div>`).join('');
+}
+
+/* ---------- mois en cours (logique DarwinIA) ----------
+   DarwinIA note le rendement MOIS PAR MOIS. Le danger du milieu/fin de mois est
+   toujours le même : juger le mois à l'instinct (« il faut que je finisse
+   vert ») au lieu de le situer. Référence : le portefeuille backtesté rejoué
+   jour par jour (btSimuleCompteUnique) — pour chaque mois complet de l'
+   historique on connaît son rendement AU MÊME JOUR DU MOIS que nous, donc on
+   peut dire si le mois en cours est banal ou exceptionnel À CE STADE. */
+let moisRefCache=null;
+function moisRefBacktest(){
+  const bts=(store.backtests||[]).filter(b=>b.included!==false);
+  if(!bts.length) return null;
+  const cle=compteActifId+'|'+bts.length+'|'+bts.map(b=>(b.deals||[]).length||(b.days||[]).length).join(',');
+  if(moisRefCache && moisRefCache.cle===cle) return moisRefCache.val;
+  let val=null;
+  try{
+    const sim=btSimuleCompteUnique(bts,100000,1);
+    // sim.dates (AAAA-MM-JJ, un point par jour tradé) + sim.serie (solde en fin de jour)
+    const parMois={}; let prev=sim.capital;
+    for(let i=0;i<sim.dates.length;i++){
+      const m=sim.dates[i].slice(0,7), dom=Number(sim.dates[i].slice(8,10));
+      if(!parMois[m]) parMois[m]={s0:prev};
+      parMois[m].fin=sim.serie[i]; parMois[m]['j'+dom]=sim.serie[i];
+      prev=sim.serie[i];
+    }
+    // Le dernier mois du backtest est probablement tronqué : on l'écarte.
+    const complets=Object.keys(parMois).sort().slice(0,-1).filter(m=>parMois[m].s0>0);
+    if(complets.length>=6) val={parMois, complets};   // < 6 mois : pas une référence
+  }catch(e){ val=null; }
+  moisRefCache={cle, val};
+  return val;
+}
+/* Rendement de chaque mois complet de la référence, arrêté au jour `dom` du mois.
+   Un mois sans trade avant ce jour vaut 0 % (compte à plat) — c'est bien un état
+   possible du portefeuille, pas une donnée manquante. */
+function moisAuStade(ref, dom){
+  return ref.complets.map(m=>{
+    const o=ref.parMois[m];
+    for(let j=dom;j>=1;j--) if(o['j'+j]!=null) return (o['j'+j]/o.s0-1)*100;
+    return 0;
+  });
+}
+function moisEnCoursLive(a){
+  const now=new Date(), y=now.getFullYear(), mo=now.getMonth();
+  const cl=a.closed.filter(t=>t.closeTime);
+  const duMois=cl.filter(t=>t.closeTime.getFullYear()===y&&t.closeTime.getMonth()===mo);
+  const pnl=duMois.reduce((s,t)=>s+t.profit,0);
+  const s0=a.balance-pnl;                       // solde de début de mois (réalisé)
+  const prevD=new Date(y,mo-1,1);
+  const duPrev=cl.filter(t=>t.closeTime.getFullYear()===prevD.getFullYear()&&t.closeTime.getMonth()===prevD.getMonth());
+  const pnlPrev=duPrev.reduce((s,t)=>s+t.profit,0);
+  const s0Prev=s0-pnlPrev;
+  return { dom:now.getDate(), joursMois:new Date(y,mo+1,0).getDate(),
+    pnl, n:duMois.length, ret:s0>0?pnl/s0*100:0,
+    retPrev:(duPrev.length&&s0Prev>0)?pnlPrev/s0Prev*100:null, nPrev:duPrev.length };
+}
+function renderMoisCourant(a){
+  const el=document.getElementById('mcStats'); if(!el) return;
+  const mc=moisEnCoursLive(a), ref=moisRefBacktest();
+  const nomMois=new Date().toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+  const tag=document.getElementById('mcTag');
+  tag.textContent=mc.n?((mc.ret>=0?'+':'')+pct(mc.ret,2)):'—';
+  tag.className='tag '+(mc.n?(mc.ret>=0?'g':'r'):'a');
+  let stade=null, med=null, pctPos=null;
+  if(ref){
+    const auStade=moisAuStade(ref, mc.dom);
+    stade={ n:auStade.length,
+      dessous:auStade.filter(v=>v<mc.ret).length/auStade.length*100 };
+    const complets=ref.complets.map(m=>(ref.parMois[m].fin/ref.parMois[m].s0-1)*100).sort((x,y)=>x-y);
+    med=complets[Math.floor(complets.length/2)];
+    pctPos=complets.filter(v=>v>0).length/complets.length*100;
+  }
+  const reste=mc.joursMois-mc.dom;
+  el.innerHTML=[
+    {lab:'Rendement de '+nomMois, val:(mc.ret>=0?'+':'')+pct(mc.ret,2), cls:mc.ret>0?'pos':mc.ret<0?'neg':'',
+     sub:(mc.pnl>=0?'+':'')+money(mc.pnl)+' · '+mc.n+' trade(s) clôturé(s)'},
+    {lab:'Au même stade du backtest', val:stade?('mieux que '+fmt(stade.dessous,0)+' %'):'—',
+     cls:stade?(stade.dessous>=50?'pos':stade.dessous>=20?'warn':'neg'):'',
+     sub:stade?('des '+stade.n+' mois de référence, au jour '+mc.dom):'importe tes backtests (détail requis)'},
+    {lab:'Mois précédent', val:mc.retPrev==null?'—':((mc.retPrev>=0?'+':'')+pct(mc.retPrev,2)),
+     cls:mc.retPrev==null?'':(mc.retPrev>=0?'pos':'neg'), sub:mc.retPrev==null?'aucun trade':'mois complet · '+mc.nPrev+' trade(s)'},
+    {lab:'Jours restants', val:String(reste), sub:'le mois DarwinIA se clôt le '+mc.joursMois+'/'+String(new Date().getMonth()+1).padStart(2,'0')}
+  ].map(statHTML).join('');
+  // --- le message de discipline : situer, puis tenir la ligne ---
+  const msgs=[];
+  const ic={info:'M12 16v-4M12 8h.01',ok:'M20 6 9 17l-5-5',warn:'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'};
+  if(!mc.n){
+    msgs.push(['info','Aucun trade clôturé ce mois-ci pour l\'instant. Rien à juger — laisse tourner.']);
+  } else if(!ref){
+    msgs.push(['info','Sans backtests importés (avec le détail des trades), impossible de situer ce mois. La comparaison vaut mieux que l\'intuition : importe-les dans l\'onglet « Backtests ».']);
+  } else if(mc.ret<0){
+    if(stade.dessous>=20){
+      msgs.push(['warn','Mois négatif mais banal pour ce portefeuille : à J'+mc.dom+', '+fmt(stade.dessous,0)+' % de ses mois étaient encore plus bas — et '+fmt(pctPos,0)+' % des mois de la référence ont fini positifs. La seule faute possible maintenant serait de forcer : risque constant, et le mois se termine comme il se termine.']);
+    } else {
+      msgs.push(['warn','Mois inhabituellement faible : seuls '+fmt(stade.dessous,0)+' % des mois du backtest étaient plus bas à ce stade. Ce n\'est PAS un signal pour pousser le risque — c\'est un signal pour vérifier les sets dans « Contrôle live » (divergence, sets muets, coûts).']);
+    }
+    if(reste<=5){
+      msgs.push(['warn','Fin de mois : la tentation classique est de surrisquer pour « finir vert ». DarwinIA récompense la régularité sur plusieurs mois — un mois sauvé en doublant le risque se paie sur la note et sur le drawdown. Le mois prochain repart de zéro.']);
+    }
+  } else {
+    if(med!=null && mc.ret>=med){
+      msgs.push(['ok','Mois au-dessus de la médiane de la référence ('+(med>=0?'+':'')+pct(med,2)+'). L\'erreur classique d\'un bon mois : augmenter le risque « tant que ça marche » — le backtest suppose un risque constant, c\'est lui qui produit la courbe. On ne change rien.']);
+    } else {
+      msgs.push(['ok','Mois positif, dans la norme du portefeuille (médiane '+(med>=0?'+':'')+pct(med,2)+'). Risque constant, zéro ajustement — la régularité est exactement ce que DarwinIA note.']);
+    }
+  }
+  document.getElementById('mcMsg').innerHTML=msgs.map(([t,b])=>'<div class="alert '+t+'"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="'+ic[t]+'"/></svg><div>'+b+'</div></div>').join('');
 }
 
 function setHealth(g){ const tot=g.pl+g.floating; if(tot>0)return ['g','sain']; if(tot> -200)return ['a','neutre']; return ['r','en perte']; }
