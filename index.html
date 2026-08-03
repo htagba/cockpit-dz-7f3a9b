@@ -191,6 +191,12 @@
       <span class="help" id="vueMeta" style="margin:0;white-space:nowrap">—</span>
     </div>
     <div class="grid g3" id="vueGrid"><div class="empty">Chargement des comptes…</div></div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>Comparaison inter-comptes <span style="font-weight:400;color:var(--dim);font-size:11px">(tout est ramené à 0,1 % de risque par trade)</span> <span class="tag a" id="vueCompTag">—</span></h3>
+      <div id="vueComp" style="overflow:auto"><div class="empty">En attente des données…</div></div>
+      <div class="help" style="margin-top:10px">Tes comptes n'ont <b>pas le même risque par trade</b> : comparer leurs rendements bruts avantagerait mécaniquement le plus risqué. Les lignes « à 0,1 % » divisent tout par le risque du compte — à cette échelle, seule la <b>qualité des sets</b> parle. Le <b>R moyen</b> (gain moyen par trade, en multiples du risque misé) est la mesure la plus juste pour décider <b>où ajouter tes prochains sets</b>. Comptes d'âges différents : les colonnes ⏳ (&lt; 30 trades) se lisent avec des pincettes.</div>
+    </div>
   </div>
 
   <!-- COCKPIT -->
@@ -1047,7 +1053,10 @@ async function chargerVue(){
       return {c, data:await r.json()};
     }catch(e){ return {c, err:String(e&&e.message||e)}; }
   }));
+  // analyze() une seule fois par compte : cartes ET tableau comparatif s'en servent.
+  res.forEach(r=>{ if(r.data&&!r.err){ try{ r.a=analyze(r.data); }catch(e){ r.err='données invalides'; r.data=null; } } });
   grid.innerHTML=res.map(vueCarte).join('');
+  renderComparaison(res);
   grid.querySelectorAll('.vuecard').forEach(el=>el.addEventListener('click',()=>{
     changerCompte(el.dataset.id);
     document.querySelector('.tab[data-v="cockpit"]').click();
@@ -1066,7 +1075,7 @@ function vueCarte(r){
       +'<span class="tag r">injoignable</span></div>'
       +'<div class="empty" style="padding:14px 0">Fichier illisible — vérifie la publication du VPS.<br><span style="font-size:11px">'+esc(r.err||'')+'</span></div></div>';
   }
-  const a=analyze(r.data), ps=pertesSerie(a), ds=estimateDScore(a);
+  const a=r.a||analyze(r.data), ps=pertesSerie(a), ds=estimateDScore(a);
   const t=parseT(r.data.exportedAtIso||r.data.exportedAt);
   const age=t?Math.round((Date.now()-t.getTime())/60000):null;
   const perime=age!=null&&age>VUE_FRAICHEUR_MIN;
@@ -1093,6 +1102,78 @@ function vueCarte(r){
     +'<div class="help" style="margin-top:8px">'+(perime?'<b class="neg">Données '+ageTxt+'</b> — publication VPS à vérifier':'Données '+ageTxt)
     +' · compte '+esc(String(r.data.account||'?'))+(actif?' · <b>affiché</b>':'')+'</div>'
     +'</div>';
+}
+/* ---------- comparaison inter-comptes ----------
+   Question à laquelle ce tableau répond : « à risque égal, quel compte trade le
+   mieux ? » — pour décider où concentrer les prochains sets. Normalisation :
+   rendement et drawdown divisés par le risque/trade du compte puis ramenés à
+   0,1 % ; le R moyen (gain moyen par trade ÷ mise risquée) est par construction
+   indépendant du risque ET du solde : c'est le juge de paix. */
+function renderComparaison(res){
+  const el=document.getElementById('vueComp'); if(!el) return;
+  const tag=document.getElementById('vueCompTag');
+  const cols=res.filter(r=>r.a).map(r=>{
+    const a=r.a, s=reglagesDuCompte(r.c.id);
+    const risk=Number(s.riskPct)||0.1, k=0.1/risk;   // facteur de normalisation
+    const cl=a.closed.filter(t=>t.closeTime), n=cl.length;
+    const R=(n&&a.dep>0)?((a.realized/n)/a.dep*100)/risk:null;
+    return { nom:r.c.nom, risk, n, jours:a.days, jeune:n<30,
+      pl:a.realized, ret:a.retPct, retN:a.retPct*k,
+      dd:a.maxDDpct, ddN:a.maxDDpct*k,
+      retDD:a.maxDDpct>0?a.retPct/a.maxDDpct:null,
+      pf:a.pf, wr:n?a.winRate:null, R, serieMax:pertesSerie(a).max };
+  });
+  if(cols.length<2){
+    el.innerHTML='<div class="empty">Il faut au moins 2 comptes joignables pour comparer.</div>';
+    tag.textContent='—'; tag.className='tag a'; return;
+  }
+  const num=(v,d,suf)=>v==null?'—':(v===Infinity?'∞':fmt(v,d)+(suf||''));
+  // Une ligne = {lab, val(c) → nombre pour le surlignage, txt(c), dir}
+  const lignes=[
+    {lab:'Risque par trade', txt:c=>pct(c.risk,2)},
+    {lab:'Trades clôturés', txt:c=>c.n+(c.jeune?' ⏳':'')},
+    {lab:'Jours tradés', txt:c=>String(c.jours)},
+    {lab:'P&L réalisé', txt:c=>(c.pl>=0?'+':'')+money(c.pl)},
+    {lab:'Rendement brut', txt:c=>(c.ret>=0?'+':'')+pct(c.ret,2)},
+    {lab:'Rendement à 0,1 %', val:c=>c.retN, txt:c=>(c.retN>=0?'+':'')+pct(c.retN,2), dir:'max'},
+    {lab:'DD max à 0,1 %', val:c=>c.ddN, txt:c=>pct(c.ddN,2), dir:'min'},
+    {lab:'Retour ÷ DD', val:c=>c.retDD, txt:c=>num(c.retDD,2), dir:'max'},
+    {lab:'Profit factor', val:c=>c.pf, txt:c=>num(c.pf,2), dir:'max'},
+    {lab:'Taux de réussite', txt:c=>c.wr==null?'—':pct(c.wr,1)},
+    {lab:'R moyen / trade', val:c=>c.R, txt:c=>num(c.R,2,' R'), dir:'max', fort:true},
+    {lab:'Pire série de pertes', txt:c=>c.n?String(c.serieMax):'—'}
+  ];
+  let h='<table style="font-size:12.5px;min-width:520px"><thead><tr><th style="text-align:left"></th>'
+    +cols.map(c=>'<th style="text-align:right">'+esc(c.nom)+(c.n<10?' ⏳':'')+'</th>').join('')+'</tr></thead><tbody>';
+  lignes.forEach(l=>{
+    let best=null;
+    if(l.dir){
+      // La ★ ne couronne jamais un échantillon muet : < 10 trades = hors concours
+      // (les valeurs restent affichées, le ⏳ de l'en-tête explique pourquoi).
+      const vals=cols.map((c,i)=>c.n>=10?l.val(c):null);
+      const ok=vals.filter(v=>v!=null&&!Number.isNaN(v));
+      if(ok.length>=2){ const b=l.dir==='max'?Math.max.apply(null,ok):Math.min.apply(null,ok); best=vals.indexOf(b); }
+    }
+    h+='<tr><td style="color:var(--muted)'+(l.fort?';font-weight:600;color:var(--text)':'')+'">'+l.lab+'</td>'
+      +cols.map((c,i)=>'<td style="text-align:right'+(l.fort?';font-weight:600':'')+'"'
+        +(i===best?' class="pos"':'')+'>'+l.txt(c)+(i===best?' ★':'')+'</td>').join('')+'</tr>';
+  });
+  h+='</tbody></table>';
+  // --- verdict prudent : R moyen d'abord, jamais sur un échantillon muet ---
+  const cands=cols.filter(c=>c.n>=10&&c.R!=null);
+  let verdict='';
+  if(cands.length>=2){
+    const tri=cands.slice().sort((x,y)=>y.R-x.R), t1=tri[0], t2=tri[1];
+    tag.textContent=t1.nom; tag.className='tag '+(t1.jeune?'a':'g');
+    verdict='<div class="alert '+(t1.jeune?'warn':'ok')+'" style="margin-top:10px"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16v-4M12 8h.01"/><circle cx="12" cy="12" r="10"/></svg><div>'
+      +'À risque égal, <b>'+esc(t1.nom)+'</b> dégage le plus par trade ('+fmt(t1.R,2)+' R contre '+fmt(t2.R,2)+' R pour '+esc(t2.nom)+').'
+      +(tri.some(c=>c.jeune)?' <b>Mais '+tri.filter(c=>c.jeune).map(c=>'« '+esc(c.nom)+' » ('+c.n+' trades)').join(' et ')+' '+(tri.filter(c=>c.jeune).length>1?'sont':'est')+' encore en calibration</b> : en dessous de ~30 trades, ce classement peut s\'inverser sur deux ou trois trades. On regarde, on ne réalloue pas.':' Échantillons suffisants pour que la hiérarchie commence à compter — c\'est là que tes prochains sets rapporteront le plus par unité de risque.')
+      +'</div></div>';
+  } else {
+    tag.textContent='trop tôt'; tag.className='tag a';
+    verdict='<div class="help" style="margin-top:10px">Moins de deux comptes avec ≥ 10 trades clôturés : le classement viendra avec l\'historique.</div>';
+  }
+  el.innerHTML=h+verdict;
 }
 if(!store.majCompteJuil2026){
   store.registre = {};
