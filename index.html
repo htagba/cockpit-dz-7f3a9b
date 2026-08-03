@@ -160,6 +160,7 @@
       </div>
     </div>
     <div class="tabs" id="tabs">
+    <div class="tab" data-v="vue" id="tabVue" style="display:none"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="9" height="7" rx="1"/><rect x="13" y="4" width="9" height="7" rx="1"/><rect x="2" y="13" width="9" height="7" rx="1"/><rect x="13" y="13" width="9" height="7" rx="1"/><path d="M6 8h1M17 8h1M6 17h1M17 17h1"/></svg>Vue d'ensemble</div>
     <div class="tab active" data-v="cockpit"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Cockpit</div>
     <div class="tab" data-v="darwinex"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>Darwinex</div>
     <div class="tab" data-v="sets"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Tous mes sets</div>
@@ -182,6 +183,15 @@
   <main class="main">
   <div class="wrap">
     <div id="staleBanner" class="alert danger" style="display:none;margin-bottom:14px"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div id="staleMsg"></div></div>
+
+  <!-- VUE D'ENSEMBLE (multi-comptes) -->
+  <div class="view" id="v-vue">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="help" style="margin:0">Tous tes comptes du manifeste, chacun jugé avec <b>ses propres seuils</b>. Un compte mis en pause sur le VPS (<code>actif: false</code>) disparaît simplement de cette liste — ce n'est pas une panne. Clique sur une carte pour ouvrir le compte.</div>
+      <span class="help" id="vueMeta" style="margin:0;white-space:nowrap">—</span>
+    </div>
+    <div class="grid g3" id="vueGrid"><div class="empty">Chargement des comptes…</div></div>
+  </div>
 
   <!-- COCKPIT -->
   <div class="view active" id="v-cockpit">
@@ -589,6 +599,25 @@
       </div>
     </details>
 
+    <details class="card" data-sect="jdec" style="margin-top:14px" open>
+      <summary><h3>Journal de décisions <span style="font-weight:400;color:var(--dim);font-size:11px">(pourquoi, décidé à quel état du compte)</span> <span class="tag a" id="jdecTag">—</span></h3></summary>
+      <div class="sect-body">
+        <div class="help" style="margin-bottom:10px">Consigne chaque intervention <b>au moment où tu la fais</b> : couper un set, changer un risque, remonter une limite. L'état du compte (équité, drawdown, série de pertes, DScore) est photographié automatiquement. À la revue semestrielle, tu jugeras tes décisions sur ce qu'elles étaient — pas sur ce que ta mémoire en aura fait. Les changements de réglages du Garde-fou s'ajoutent tout seuls.</div>
+        <div class="row" style="margin-bottom:8px">
+          <div class="field" style="margin:0;flex:none;width:160px"><label>Type</label><select id="jdecType">
+            <option value="set">Set (coupe, ajout…)</option>
+            <option value="risque">Risque / lot</option>
+            <option value="limite">Limite / seuil</option>
+            <option value="autre">Autre</option>
+          </select></div>
+          <div class="field" style="margin:0;flex:1"><label>Décision</label><input type="text" id="jdecTitre" maxlength="120" placeholder="Ex. : coupé Magic 7 — diverge depuis 30 trades"></div>
+        </div>
+        <div class="field" style="margin-bottom:8px"><label>Pourquoi (raison, alternative écartée…)</label><textarea id="jdecNote" rows="2" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px" placeholder="La raison comptera plus que la décision au moment du bilan."></textarea></div>
+        <button class="primary" id="jdecAdd">Consigner la décision</button>
+        <div id="jdecList" style="margin-top:14px"></div>
+      </div>
+    </details>
+
     <details class="card" data-sect="demoReg" style="margin-top:14px">
       <summary><h3>Registre des <span id="regNb">35</span> sets <span style="font-weight:400;color:var(--dim);font-size:11px">(déclare ici les bascules faites dans MT5)</span></h3></summary>
       <div class="sect-body"><div id="demoRegistre"></div></div>
@@ -858,7 +887,7 @@ var compteActifId=store.compteActif||'principal';
 /* 'compteNum' = numéro MT5 vu la dernière fois pour CE compte : il doit être dans
    le profil, sinon basculer d'un compte à l'autre passerait pour un changement
    de compte et purgerait l'historique d'équité à chaque bascule. */
-const PROFIL_CHAMPS=['registre','rotations','revueDerniere','equitySnaps','pfReport','labo','compteNum','backtests','settings','sets','setNames','setsRetires'];
+const PROFIL_CHAMPS=['registre','rotations','revueDerniere','equitySnaps','pfReport','labo','compteNum','backtests','settings','sets','setNames','setsRetires','decisions'];
 // `var` + garde : statutDefaut() peut être appelé (migrations) avant ce bloc.
 function compteIdx(){ if(!COMPTES) return 0; const i=COMPTES.findIndex(c=>c.id===compteActifId); return i<0?0:i; }
 function compteNom(){ return (COMPTES[compteIdx()]||{}).nom||'Compte réel'; }
@@ -884,6 +913,8 @@ function profilMonter(id){
   // …et SA liste de sets + SES renommages.
   if(!Array.isArray(store.sets)) store.sets=JSON.parse(JSON.stringify(SETS_REGISTRY));
   store.setNames=store.setNames||{};
+  // …et SON journal de décisions (03/08/2026).
+  if(!Array.isArray(store.decisions)) store.decisions=[];
 }
 /* Migration : les champs historiques (mono-compte) deviennent le profil du compte actif. */
 if(!store.parCompteV1){ profilRanger(); store.parCompteV1=true; saveStore(store); }
@@ -949,9 +980,10 @@ function changerCompte(id){
 }
 function renderCompteSel(){
   const sel=document.getElementById('compteSel'); if(!sel) return;
-  if(COMPTES.length<2){ sel.style.display='none'; return; }
+  if(COMPTES.length<2){ sel.style.display='none'; majOngletVue(); return; }
   sel.style.display='';
   sel.innerHTML=COMPTES.map(c=>'<option value="'+c.id+'"'+(c.id===compteActifId?' selected':'')+'>'+String(c.nom).replace(/</g,'&lt;')+'</option>').join('');
+  majOngletVue();
 }
 async function chargerComptes(){
   if(DATA_ENDPOINT==='data') return;              // serveur local : mono-compte
@@ -978,6 +1010,83 @@ async function chargerComptes(){
   }catch(e){ /* manifeste absent ou invalide : mono-compte */ }
 }
 document.getElementById('compteSel').addEventListener('change',e=>changerCompte(e.target.value));
+
+/* ================= VUE D'ENSEMBLE : tous les comptes sur un écran =========
+   Chaque compte du manifeste est jugé avec SES seuils (parCompte[id].settings) ;
+   on ne montre QUE les comptes du manifeste : un compte en pause ("actif": false
+   côté VPS) n'y figure plus — l'afficher « en panne » serait un faux signal.
+   Les données sont relues à chaque ouverture de l'onglet puis toutes les
+   POLL_MS tant qu'il reste affiché. */
+let vueTimer=null;
+function majOngletVue(){
+  const t=document.getElementById('tabVue'); if(!t) return;
+  t.style.display=(COMPTES.length>1)?'':'none';
+}
+/* Réglages d'un compte SANS le monter : ceux du profil, complétés des défauts.
+   Pour le compte actif, store.settings est la version la plus fraîche. */
+function reglagesDuCompte(id){
+  if(id===compteActifId) return Object.assign(reglagesDefaut(), store.settings||{});
+  return Object.assign(reglagesDefaut(), ((store.parCompte||{})[id]||{}).settings||{});
+}
+function vueUrl(c){ return c.fichier?DATA_ENDPOINT.replace(/data\.json$/,c.fichier):DATA_ENDPOINT; }
+/* Même tolérance que le veilleur VPS : au-delà, la publication est en panne. */
+const VUE_FRAICHEUR_MIN=45;
+async function chargerVue(){
+  const grid=document.getElementById('vueGrid'); if(!grid) return;
+  const res=await Promise.all(COMPTES.map(async c=>{
+    try{
+      const r=await fetch(vueUrl(c)+'?t='+Date.now(),{cache:'no-store'});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return {c, data:await r.json()};
+    }catch(e){ return {c, err:String(e&&e.message||e)}; }
+  }));
+  grid.innerHTML=res.map(vueCarte).join('');
+  grid.querySelectorAll('.vuecard').forEach(el=>el.addEventListener('click',()=>{
+    changerCompte(el.dataset.id);
+    document.querySelector('.tab[data-v="cockpit"]').click();
+  }));
+  const meta=document.getElementById('vueMeta');
+  if(meta) meta.textContent='Actualisé à '+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+' · auto toutes les '+(POLL_MS/1000)+' s';
+}
+function vueCarte(r){
+  const c=r.c, s=reglagesDuCompte(c.id);
+  const lim=Math.max(1,Math.round(Number(s.pertesMax)||6));
+  const actif=c.id===compteActifId;
+  const tete='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">'
+    +'<b style="font-size:14px">'+esc(c.nom)+'</b>';
+  if(r.err||!r.data){
+    return '<div class="card vuecard" data-id="'+esc(c.id)+'" style="cursor:pointer">'+tete
+      +'<span class="tag r">injoignable</span></div>'
+      +'<div class="empty" style="padding:14px 0">Fichier illisible — vérifie la publication du VPS.<br><span style="font-size:11px">'+esc(r.err||'')+'</span></div></div>';
+  }
+  const a=analyze(r.data), ps=pertesSerie(a), ds=estimateDScore(a);
+  const t=parseT(r.data.exportedAtIso||r.data.exportedAt);
+  const age=t?Math.round((Date.now()-t.getTime())/60000):null;
+  const perime=age!=null&&age>VUE_FRAICHEUR_MIN;
+  // État global : le pire des signaux (données, drawdown, série de pertes).
+  let niv='g', label='sain';
+  if(a.curDDpct>=s.ddWarn*0.6||(ps.courante>0&&ps.courante>=lim-1)){ niv='a'; label='à surveiller'; }
+  if(perime){ niv='r'; label='données périmées'; }
+  if(a.curDDpct>=s.ddWarn||ps.courante>=lim){ niv='r'; label='à traiter'; }
+  const ddCol=a.curDDpct>=s.ddWarn?'var(--red)':a.curDDpct>=s.ddWarn*0.6?'var(--amber)':'var(--green)';
+  const pCol=ps.courante>=lim?'var(--red)':(ps.courante>0&&ps.courante>=lim-1)?'var(--amber)':'var(--green)';
+  const calOk=a.closed.length>=25&&a.days>=15;
+  const ageTxt=age==null?'fraîcheur inconnue':age<1?'à l\'instant':age<60?('il y a '+age+' min'):('il y a '+Math.floor(age/60)+' h '+(age%60)+' min');
+  const ligne=(lab,val,extra)=>'<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-top:5px"><span style="color:var(--muted)">'+lab+'</span><span>'+val+(extra||'')+'</span></div>';
+  return '<div class="card vuecard" data-id="'+esc(c.id)+'" style="cursor:pointer'+(actif?';outline:1px solid var(--accent)':'')+'">'
+    +tete+'<span class="tag '+niv+'">'+label+'</span></div>'
+    +'<div style="font-size:21px;font-weight:700">'+money(a.equity)+'</div>'
+    +'<div class="delta" style="margin-bottom:8px">P&amp;L '+(a.realized>=0?'+':'')+money(a.realized)+' ('+pct(a.retPct)+')'
+    +(a.open.length?(' · '+a.open.length+' ouverte(s) '+money(a.floating)):'')+'</div>'
+    +'<div class="bar" style="height:6px"><span style="width:'+clamp(a.curDDpct/(s.ddMax||10)*100,0,100)+'%;background:'+ddCol+'"></span></div>'
+    +ligne('Drawdown','<b style="color:'+ddCol+'">'+pct(a.curDDpct)+'</b>',' <span style="color:var(--dim)">/ alerte '+pct(s.ddWarn,1)+'</span>')
+    +ligne('Pertes d\'affilée','<b style="color:'+pCol+'">'+ps.courante+'</b>',' <span style="color:var(--dim)">/ limite '+lim+'</span>')
+    +ligne('DScore estimé','<b>'+ds.score+'</b>',' <span style="color:var(--dim)">/ objectif 55</span>')
+    +ligne('Calibration', calOk?'✅ validée':(a.closed.length+'/25 · '+a.days+'/15 j'))
+    +'<div class="help" style="margin-top:8px">'+(perime?'<b class="neg">Données '+ageTxt+'</b> — publication VPS à vérifier':'Données '+ageTxt)
+    +' · compte '+esc(String(r.data.account||'?'))+(actif?' · <b>affiché</b>':'')+'</div>'
+    +'</div>';
+}
 if(!store.majCompteJuil2026){
   store.registre = {};
   store.settings = store.settings || {};
@@ -3100,8 +3209,65 @@ function planRotation(aOverride){
 /* ---------- rendus de l'onglet Registre & revue ---------- */
 function renderRegistreTab(){
   if(!document.getElementById('demoRegistre')) return;
-  renderRotation(); renderRevue(); renderRegistre(); reserveCartes();
+  renderRotation(); renderRevue(); renderRegistre(); reserveCartes(); renderDecisions();
 }
+
+/* ---------- journal de décisions ----------
+   Une entrée = {t, type, titre, note, ctx, auto} rangée dans le PROFIL du compte
+   (store.decisions, champ de PROFIL_CHAMPS) : chaque compte a son journal, il
+   voyage avec « Publier les backtests » comme le reste du profil. `ctx` fige
+   l'état du compte au moment de la décision — c'est lui qui permettra de juger
+   à froid, à la revue, si l'intervention était fondée. */
+const JDEC_TYPES={set:'Set', risque:'Risque', limite:'Limite', reglage:'Réglage', autre:'Autre'};
+function decisionCtx(){
+  if(!lastA) return null;   // pas de données live : on consigne sans photo
+  return { eq:Math.round(lastA.equity), dd:round2(lastA.curDDpct),
+           serie:pertesSerie(lastA).courante, ds:estimateDScore(lastA).score };
+}
+function decisionAjouter(type, titre, note, auto){
+  if(!Array.isArray(store.decisions)) store.decisions=[];
+  store.decisions.unshift({ t:new Date().toISOString(), type:type||'autre',
+    titre:String(titre||'').trim(), note:String(note||'').trim(),
+    ctx:decisionCtx(), auto:auto?true:undefined });
+  if(store.decisions.length>500) store.decisions.length=500;   // garde-fou taille localStorage
+  profilRanger(); saveStore(store);
+}
+function renderDecisions(){
+  const el=document.getElementById('jdecList'), tag=document.getElementById('jdecTag');
+  if(!el) return;
+  const ds=Array.isArray(store.decisions)?store.decisions:[];
+  tag.textContent=ds.length?(ds.length+' entrée'+(ds.length>1?'s':'')):'vide';
+  tag.className='tag '+(ds.length?'g':'a');
+  if(!ds.length){ el.innerHTML='<div class="empty">Aucune décision consignée pour l\'instant. La première ligne s\'écrira ici — ou toute seule au prochain changement de réglages.</div>'; return; }
+  el.innerHTML=ds.map((d,i)=>{
+    const dt=new Date(d.t);
+    const quand=isNaN(dt)?esc(d.t):dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    const ctx=d.ctx?('équité '+fmt(d.ctx.eq,0)+' $ · DD '+pct(d.ctx.dd)+' · série '+d.ctx.serie+' perte(s) · DScore '+d.ctx.ds):'sans photo du compte (hors connexion)';
+    return '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;background:var(--panel2)">'
+      +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
+      +'<div><span class="tag '+(d.auto?'a':'g')+'" style="margin-right:8px">'+esc(JDEC_TYPES[d.type]||'Autre')+(d.auto?' · auto':'')+'</span><b style="font-size:13px">'+esc(d.titre||'(sans titre)')+'</b></div>'
+      +'<span style="font-size:11px;color:var(--dim);white-space:nowrap">'+quand+' <button class="ghost sm" data-jdec-del="'+i+'" title="Supprimer cette entrée" style="padding:1px 7px;margin-left:6px">✕</button></span></div>'
+      +(d.note?'<div style="font-size:12.5px;margin-top:5px;white-space:pre-wrap">'+esc(d.note)+'</div>':'')
+      +'<div style="font-size:11px;color:var(--muted);margin-top:5px">📷 '+ctx+'</div>'
+      +'</div>';
+  }).join('');
+  el.querySelectorAll('[data-jdec-del]').forEach(b=>b.addEventListener('click',e=>{
+    const i=Number(e.target.dataset.jdecDel);
+    const d=store.decisions[i]; if(!d) return;
+    if(!confirm('Supprimer l\'entrée « '+(d.titre||'sans titre')+' » ?')) return;
+    store.decisions.splice(i,1); profilRanger(); saveStore(store); renderDecisions();
+  }));
+}
+(function(){
+  const btn=document.getElementById('jdecAdd'); if(!btn) return;
+  btn.addEventListener('click',()=>{
+    const titre=document.getElementById('jdecTitre').value.trim();
+    if(!titre){ alert('Écris au moins la décision (le titre).'); return; }
+    decisionAjouter(document.getElementById('jdecType').value, titre, document.getElementById('jdecNote').value);
+    document.getElementById('jdecTitre').value=''; document.getElementById('jdecNote').value='';
+    renderDecisions(); flash('Décision consignée — compte « '+compteNom()+' »');
+  });
+})();
 
 function renderRotation(){
   const el=document.getElementById('demoRotation'), tag=document.getElementById('demoRotTag');
@@ -3194,6 +3360,20 @@ function rapportSemestrielTexte(){
   L.push('— Bascules déclarées depuis la dernière revue —');
   if(rots.length) rots.forEach(r=>L.push('  '+r.date+' : M'+r.magic+' → '+r.vers+(r.motif?' ('+r.motif+')':'')));
   else L.push('  Aucune.');
+  L.push('');
+  // Journal de décisions : relire ses choix AVEC l'état du compte au moment où
+  // ils ont été pris — c'est tout l'intérêt de la revue.
+  const decs=(store.decisions||[]).filter(d=>!dern||d.t>dern);
+  L.push('— DÉCISIONS CONSIGNÉES DEPUIS LA DERNIÈRE REVUE —');
+  if(decs.length){
+    decs.slice().reverse().forEach(d=>{   // ordre chronologique dans le rapport
+      const dt=new Date(d.t), quand=isNaN(dt)?d.t:dt.toLocaleDateString('fr-FR');
+      L.push('  '+quand+' ['+(JDEC_TYPES[d.type]||'Autre')+(d.auto?'/auto':'')+'] '+(d.titre||'(sans titre)'));
+      if(d.note) L.push('     Pourquoi : '+d.note.replace(/\s*\n\s*/g,' '));
+      if(d.ctx) L.push('     État alors : équité '+fmt(d.ctx.eq,0)+' $ · DD '+fmt(d.ctx.dd,2)+' % · série '+d.ctx.serie+' · DScore '+d.ctx.ds);
+    });
+    L.push('  → Pour chaque ligne : la raison tenait-elle ? Referais-tu pareil ?');
+  } else L.push('  Aucune. (Si tu es intervenu sans consigner, note-le : la revue ne peut juger que ce qui est écrit.)');
   L.push('');
   L.push('Estimations indicatives — pas un conseil en investissement.');
   return L.join('\n');
@@ -3396,10 +3576,17 @@ document.getElementById('calcSym').addEventListener('change',e=>{const d={forex:
 
 /* ---------- settings save ---------- */
 document.getElementById('saveRisk').addEventListener('click',()=>{
+  const avant=Object.assign({}, store.settings);   // pour le journal de décisions
   // Object.assign : ne PAS écraser d'éventuels réglages absents de ce formulaire.
   store.settings=Object.assign({}, store.settings, {balance:Number(document.getElementById('setBalance').value)||100000,riskPct:Number(document.getElementById('setRiskPct').value)||0.1,ddWarn:Number(document.getElementById('setDdWarn').value)||6,ddMax:Number(document.getElementById('setDdMax').value)||10,
     // série de pertes : un entier ≥ 1 (0 ou vide n'aurait aucun sens comme limite)
     pertesMax:Math.max(1,Math.round(Number(document.getElementById('setPertesMax').value)||6))});
+  // Auto-journal : tout changement de garde-fou est une décision de gestion.
+  // (balance exclue : elle suit le compte automatiquement, ce n'est pas un choix.)
+  const libs={riskPct:'risque/trade %', ddWarn:'alerte DD %', ddMax:'DD max %', pertesMax:'pertes d\'affilée max'};
+  const chgs=Object.keys(libs).filter(k=>Number(avant[k])!==Number(store.settings[k]))
+    .map(k=>libs[k]+' : '+(avant[k]==null?'—':avant[k])+' → '+store.settings[k]);
+  if(chgs.length){ decisionAjouter('reglage','Réglages de risque modifiés',chgs.join(' · '),true); renderDecisions(); }
   profilRanger();   // les réglages appartiennent au profil du compte affiché
   // renderBacktests : les cartes affichent le risque cible, render() ne les redessine pas.
   saveStore(store); render(); majLibellesRisque(); renderBacktests(lastA); flash('Paramètres enregistrés du compte « '+compteNom()+' »');
@@ -4063,6 +4250,9 @@ document.getElementById('tabs').addEventListener('click',e=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
   t.classList.add('active'); document.getElementById('v-'+t.dataset.v).classList.add('active');
+  // Vue d'ensemble : relecture immédiate + rafraîchissement tant qu'elle est affichée.
+  if(t.dataset.v==='vue'){ chargerVue(); if(!vueTimer) vueTimer=setInterval(chargerVue,POLL_MS); }
+  else if(vueTimer){ clearInterval(vueTimer); vueTimer=null; }
   if(t.dataset.v==='journal'&&lastData)render();
   if(t.dataset.v==='backtests')renderBacktests(lastA);
   if(t.dataset.v==='construction')renderLab();
