@@ -1091,7 +1091,7 @@ function vueCarte(r){
   const ligne=(lab,val,extra)=>'<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-top:5px"><span style="color:var(--muted)">'+lab+'</span><span>'+val+(extra||'')+'</span></div>';
   return '<div class="card vuecard" data-id="'+esc(c.id)+'" style="cursor:pointer'+(actif?';outline:1px solid var(--accent)':'')+'">'
     +tete+'<span class="tag '+niv+'">'+label+'</span></div>'
-    +'<div style="font-size:21px;font-weight:700">'+money(a.equity)+'</div>'
+    +'<div style="font-size:21px;font-weight:700">'+money(a.balance)+' <span style="font-size:12px;font-weight:400;color:var(--muted)">équité '+money(a.equity)+'</span></div>'
     +'<div class="delta" style="margin-bottom:8px">P&amp;L '+(a.realized>=0?'+':'')+money(a.realized)+' ('+pct(a.retPct)+')'
     +(a.open.length?(' · '+a.open.length+' ouverte(s) '+money(a.floating)):'')+'</div>'
     +'<div class="bar" style="height:6px"><span style="width:'+clamp(a.curDDpct/(s.ddMax||10)*100,0,100)+'%;background:'+ddCol+'"></span></div>'
