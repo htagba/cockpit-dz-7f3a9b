@@ -305,6 +305,7 @@
           <div class="field"><label>Seuil d'alerte drawdown (%)</label><input type="number" id="setDdWarn" value="6" step="0.5"></div>
           <div class="field"><label>Drawdown max toléré (%)</label><input type="number" id="setDdMax" value="10" step="0.5"></div>
         </div>
+        <div class="field"><label>Nombre maximum de trades perdants d'affilée</label><input type="number" id="setPertesMax" value="6" min="1" step="1"><div class="help" id="pertesMaxHelp">Ta limite de série de pertes consécutives, tous sets confondus. Atteindre cette série n'est pas anormal en soi — c'est le signal convenu à froid pour arrêter et enquêter, au lieu de décider dans le rouge.</div></div>
         <button class="primary" id="saveRisk">Enregistrer</button>
       </div>
       <div class="card">
@@ -324,6 +325,14 @@
         <div class="help">Lot = (capital × risque%) ÷ (SL points × valeur du point). Vérifie toujours la valeur du point sur ton broker.</div>
       </div>
     </div>
+    <div class="card" style="margin-top:14px">
+      <h3>Série de pertes consécutives <span class="tag a" id="pertesTag">—</span></h3>
+      <div class="bar" id="pertesBar"><span style="width:0%;background:var(--green)"></span><div class="barline" id="pertesLine" style="left:100%"></div></div>
+      <div class="meta"><span id="pertesMetaL">—</span><span id="pertesMetaR">—</span></div>
+      <div class="grid g4" id="pertesStats" style="margin-top:14px"></div>
+      <div class="help" id="pertesHelp" style="margin-top:10px">Compté sur tes trades réels clôturés, tous sets confondus, dans l'ordre de clôture. Un trade à zéro ne casse pas la série.</div>
+    </div>
+
     <div class="card" style="margin-top:14px">
       <h3>Budget de risque par set</h3>
       <table id="riskTable"><thead><tr><th>Set</th><th>Trades</th><th>Perte cumulée</th><th>Drawdown</th><th>Part du budget risque</th><th>État</th></tr></thead><tbody><tr><td colspan="6" class="empty">Aucune donnée.</td></tr></tbody></table>
@@ -676,8 +685,12 @@ let fileHandle=null, pollTimer=null, lastData=null, chart=null, lastA=null, cvMa
 const LS='dzcockpit.v1';
 function loadStore(){ try{return JSON.parse(localStorage.getItem(LS))||{}}catch(e){return{}} }
 function saveStore(s){ localStorage.setItem(LS,JSON.stringify(s)); }
-let store = Object.assign({setNames:{}, equitySnaps:[], settings:{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10}}, loadStore());
-store.setNames=store.setNames||{}; store.equitySnaps=store.equitySnaps||[]; store.settings=store.settings||{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10};
+/* Réglages de risque par défaut d'un compte. Une seule source pour les défauts :
+   les profils créés avant l'ajout d'un champ (ex. pertesMax, 03/08/2026) sont
+   complétés au montage par reglagesDefaut() — voir profilMonter(). */
+function reglagesDefaut(){ return {balance:100000,riskPct:0.1,ddWarn:6,ddMax:10,pertesMax:6}; }
+let store = Object.assign({setNames:{}, equitySnaps:[], settings:reglagesDefaut()}, loadStore());
+store.setNames=store.setNames||{}; store.equitySnaps=store.equitySnaps||[]; store.settings=Object.assign(reglagesDefaut(), store.settings||{});
 /* ================= REGISTRE DES 35 SETS (source : « Tous les sets.xlsx ») =====
    Statut par défaut : 1-20 & 35 = RÉEL (compte « Only Nomad », 21 sets, juillet 2026) ·
    21-34 = DÉMO (banc d'essai : Swing sniper 21-26 et Dolt 27-34).
@@ -865,8 +878,9 @@ function profilMonter(id){
   store.registre=store.registre||{}; store.equitySnaps=store.equitySnaps||[];
   store.labo=store.labo||{capital:100000,sets:[]};
   store.backtests=store.backtests||[];   // chaque compte a SES backtests
-  // …SES réglages (risque par trade, seuils de drawdown, solde de référence)…
-  store.settings=store.settings||{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10};
+  // …SES réglages (risque par trade, seuils de drawdown, série de pertes max,
+  // solde de référence) — complétés des défauts pour les champs ajoutés depuis.
+  store.settings=Object.assign(reglagesDefaut(), store.settings||{});
   // …et SA liste de sets + SES renommages.
   if(!Array.isArray(store.sets)) store.sets=JSON.parse(JSON.stringify(SETS_REGISTRY));
   store.setNames=store.setNames||{};
@@ -889,7 +903,7 @@ if(!store.backtestsParCompte){
    d'ajuster le risque compte par compte dans l'onglet « Garde-fou risque ». */
 if(!store.settingsParCompte){
   store.parCompte=store.parCompte||{};
-  const s0=store.settings||{balance:100000,riskPct:0.1,ddWarn:6,ddMax:10};
+  const s0=Object.assign(reglagesDefaut(), store.settings||{});
   store.parCompte[compteActifId]=store.parCompte[compteActifId]||{};
   Object.keys(store.parCompte).forEach(id=>{
     const p=store.parCompte[id];
@@ -916,6 +930,7 @@ if(!store.setsParCompte){
 function majChampsReglages(){
   const v=(id,val)=>{ const el=document.getElementById(id); if(el&&document.activeElement!==el) el.value=val; };
   v('setRiskPct', store.settings.riskPct); v('setDdWarn', store.settings.ddWarn); v('setDdMax', store.settings.ddMax);
+  v('setPertesMax', pertesMaxRegl());
   if(store.settings.balance!=null) v('setBalance', Math.round(store.settings.balance));
   if(typeof majLibellesRisque==='function') majLibellesRisque();
 }
@@ -1145,7 +1160,7 @@ function render(){
   store.settings.balance=Math.round(a.balance);
   document.getElementById('setBalance').value=Math.round(a.balance);
   renderTop(a); renderDonuts(a); renderDD(a); renderScore(a); renderCalibration(a); renderAdvice(a);
-  renderSets(a); renderRiskTab(a); renderJournal(a); renderDarwinTab(a); renderAnalyse(a);
+  renderSets(a); renderRiskTab(a); renderPertes(a); renderJournal(a); renderDarwinTab(a); renderAnalyse(a);
   renderHeat(a); renderMonthHeat(a); renderControle(a);
   lastA=a; renderBtCompare(a); renderStale(); renderRegistreTab();
 }
@@ -1226,6 +1241,10 @@ function renderAdvice(a){
   const tips=[]; const s=store.settings; const ds=estimateDScore(a);
   if(a.curDDpct>=s.ddWarn) tips.push(['danger','Drawdown élevé',`Tu es à ${pct(a.curDDpct)}, au-delà de ton seuil d'alerte (${pct(s.ddWarn,1)}). Coupe ou allège le set le plus en perte.`]);
   else if(a.curDDpct>=s.ddWarn*0.6) tips.push(['warn','Surveille le drawdown',`${pct(a.curDDpct)} de drawdown. Tu approches du seuil d'alerte (${pct(s.ddWarn,1)}).`]);
+  // série de pertes consécutives (garde-fou « trades perdants »)
+  const ps=pertesSerie(a), pLim=pertesMaxRegl();
+  if(ps.courante>=pLim) tips.push(['danger','Limite de trades perdants atteinte',`${ps.courante} pertes d'affilée, pour une limite fixée à ${pLim}. C'est le signal que tu t'es donné à froid : arrête d'ajouter du risque et va vérifier chaque set dans l'onglet « Contrôle live » avant de continuer.`]);
+  else if(ps.courante>0 && ps.courante>=pLim-1) tips.push(['warn','Série de pertes en cours',`${ps.courante} pertes d'affilée — encore ${pLim-ps.courante} avant ta limite de ${pLim}. Rien à faire pour l'instant : une série est normale, c'est la limite qui décide, pas l'impression.`]);
   // worst set
   const gs=Object.values(a.groups);
   if(gs.length){ const worst=gs.slice().sort((x,y)=>(x.pl+x.floating)-(y.pl+y.floating))[0]; const tot=worst.pl+worst.floating; if(tot<0) tips.push(['warn','Set en perte',`« ${esc(setLabel(worst.key))} » pèse ${money(tot)} sur ton compte. Vérifie ses paramètres ou réduis son lot.`]); }
@@ -1271,6 +1290,74 @@ function renderSets(a){
   grid.querySelectorAll('.setname').forEach(inp=>{inp.addEventListener('change',e=>{store.setNames[e.target.dataset.key]=e.target.value.trim();saveStore(store);render();});});
 }
 function setDD(g, base){ const c=g.closed.slice().filter(t=>t.closeTime).sort((a,b)=>a.closeTime-b.closeTime); let run=0,peak=0,mdd=0; c.forEach(t=>{run+=t.profit;if(run>peak)peak=run;const d=peak-run;if(d>mdd)mdd=d;}); base=base||store.settings.balance||100000; return base>0?mdd/base*100:0; }
+
+/* ---------- garde-fou « trades perdants d'affilée » ----------
+   La série est comptée sur le COMPTE, tous sets confondus, dans l'ordre de
+   clôture : c'est celle que tu vis vraiment, pas celle d'un set isolé. Un trade
+   à 0 (break-even, SL déplacé) ne prolonge ni ne casse la série — même
+   convention que journalCompute(). */
+function pertesMaxRegl(){ const v=Math.round(Number((store.settings||{}).pertesMax)); return v>=1?v:6; }
+function pertesSerie(a){
+  const cl=((a&&a.closed)||[]).filter(t=>t.closeTime).sort((x,y)=>x.closeTime-y.closeTime);
+  let max=0, cur=0, debut=null, debutMax=null, finMax=null;
+  cl.forEach(t=>{
+    if(t.profit<0){ if(!cur) debut=t.closeTime; cur++; if(cur>max){ max=cur; debutMax=debut; finMax=t.closeTime; } }
+    else if(t.profit>0) cur=0;
+  });
+  return {courante:cur, max, depuis:cur?debut:null, debutMax, finMax, n:cl.length};
+}
+/* Pire série de pertes du PORTEFEUILLE backtesté (compte commun, tous sets
+   mélangés chronologiquement) : la seule référence honnête pour juger une série
+   réelle. null si les backtests n'ont pas le détail des deals (imports anciens).
+   `sim` : réutilise une simulation déjà calculée par l'appelant. */
+let pertesRefCache=null;
+function pertesRefBacktest(sim){
+  const bts=(store.backtests||[]).filter(b=>b.included!==false);
+  if(!bts.length) return null;
+  const cle=compteActifId+'|'+bts.map(b=>(b.deals||[]).length).join(',');
+  if(!sim && pertesRefCache && pertesRefCache.cle===cle) return pertesRefCache.val;
+  const r=(sim||btSimuleCompteUnique(bts,100000,1)).retsTrades;
+  let val=null;
+  if(r&&r.length){ let max=0,cur=0; r.forEach(v=>{ if(v<0){cur++; if(cur>max)max=cur;} else if(v>0) cur=0; }); val=max||null; }
+  pertesRefCache={cle, val};
+  return val;
+}
+/* Niveau d'alerte : rouge à la limite, orange à un trade de la limite. */
+function pertesNiveau(courante, lim){ return courante>=lim?'r':(courante>=Math.max(lim-1,1)?'a':'g'); }
+
+function renderPertes(a){
+  const tag=document.getElementById('pertesTag'); if(!tag) return;
+  const s=pertesSerie(a), lim=pertesMaxRegl(), ref=pertesRefBacktest();
+  const niv=pertesNiveau(s.courante, lim);
+  tag.textContent=s.n?(s.courante+' / '+lim):'—';
+  tag.className='tag '+(s.n?niv:'a');
+  const bar=document.querySelector('#pertesBar > span');
+  bar.style.width=clamp(s.courante/lim*100,0,100)+'%';
+  bar.style.background=niv==='r'?'var(--red)':niv==='a'?'var(--amber)':'var(--green)';
+  // Le repère sur la jauge = la pire série du portefeuille backtesté.
+  const ligne=document.getElementById('pertesLine');
+  if(ref!=null){ ligne.style.display=''; ligne.style.left=clamp(ref/lim*100,0,100)+'%'; ligne.title='Pire série du portefeuille backtesté : '+ref+' pertes'; }
+  else ligne.style.display='none';
+  document.getElementById('pertesMetaL').textContent='En cours : '+s.courante+' perte(s) · limite '+lim;
+  document.getElementById('pertesMetaR').textContent='Marge : '+Math.max(lim-s.courante,0)+' trade(s)';
+  document.getElementById('pertesStats').innerHTML=[
+    {lab:'Série en cours', val:String(s.courante), cls:niv==='r'?'neg':niv==='a'?'warn':'pos',
+     sub:s.depuis?('depuis le '+s.depuis.toLocaleDateString('fr-FR')):'aucune série ouverte'},
+    {lab:'Ta limite', val:String(lim), sub:'réglable dans « Paramètres de risque »'},
+    {lab:'Pire série vécue', val:s.max?String(s.max):'—', cls:s.max>=lim?'neg':'',
+     sub:s.n+' trade(s) clôturé(s)'},
+    {lab:'Référence backtest', val:ref!=null?String(ref):'—', cls:(ref!=null&&ref>=lim)?'warn':'',
+     sub:ref!=null?'pire série du portefeuille':'détail des deals absent'}
+  ].map(statHTML).join('');
+  const h=document.getElementById('pertesHelp');
+  let txt='Comptée sur tes trades réels clôturés, tous sets confondus, dans l\'ordre de clôture. Un trade à zéro ne casse pas la série.';
+  if(ref!=null && ref>=lim){
+    txt+=' <b class="neg">Ta limite ('+lim+') est sous la pire série du portefeuille backtesté ('+ref+').</b> Statistiquement tu la toucheras même si tout fonctionne normalement : soit tu l\'assumes comme un vrai stop de sécurité, soit tu la remontes au-dessus de '+ref+'.';
+  } else if(ref!=null){
+    txt+=' Le repère sur la jauge est la pire série du portefeuille backtesté ('+ref+' pertes d\'affilée) : en dessous, une série reste dans le cadre connu.';
+  }
+  h.innerHTML=txt;
+}
 
 function renderRiskTab(a){
   const tb=document.querySelector('#riskTable tbody');
@@ -2008,7 +2095,8 @@ function btPaquet(){
   return { publieLe:new Date().toISOString(), nb:btRef.length,
     // Réglages de risque du compte de référence : le veilleur/rapport les liront
     // ici comme source de vérité (une seule saisie, dans l'app). Voir apply_reglages().
-    reglages:{ riskPct:Number(sRef.riskPct)||0.1, ddWarn:Number(sRef.ddWarn)||6, ddMax:Number(sRef.ddMax)||10 },
+    reglages:{ riskPct:Number(sRef.riskPct)||0.1, ddWarn:Number(sRef.ddWarn)||6, ddMax:Number(sRef.ddMax)||10,
+               pertesMax:Math.max(1,Math.round(Number(sRef.pertesMax)||6)) },
     backtests:btRef,
     // Rapport portfolio QuantAnalyzer importé (s'il existe) : il voyage avec la
     // publication pour que les autres appareils l'affichent aussi.
@@ -2707,6 +2795,27 @@ function conseilsPortefeuille(a){
   } else if(ddRef!=null && a.curDDpct>=ddRef*0.7){
     avis.push(['warn','Drawdown dans la zone haute du backtest','Ton creux actuel ('+pct(a.curDDpct,2)+') approche le pire du portefeuille backtesté ('+pct(ddRef,2)+'). Rien d\'anormal statistiquement, mais c\'est le moment de vérifier que chaque set trade bien comme prévu (sections ci-dessous) plutôt que d\'espérer.']);
   }
+  // --- série de trades perdants : le second garde-fou, en nombre de trades ---
+  const ps=pertesSerie(a), pLim=pertesMaxRegl(), pRef=pertesRefBacktest(simP);
+  const cadre=pRef!=null
+    ? ' Le portefeuille backtesté a déjà enchaîné '+pRef+' pertes d\'affilée : '
+      +(ps.courante<=pRef?'tu es encore DANS le cadre connu — la série n\'est pas la preuve que quelque chose est cassé.'
+                         :'tu es AU-DELÀ de ce que le backtest a produit, ce qui justifie une vérification set par set.')
+    : '';
+  if(ps.courante>=pLim){
+    avis.push(['danger','Limite de trades perdants atteinte ('+ps.courante+' / '+pLim+')',
+      'Tu as enchaîné '+ps.courante+' pertes, ta limite est de '+pLim+'.'+cadre
+      +' La procédure : ne rien augmenter, vérifier les sections ci-dessous (divergence, sets silencieux, coûts) et ne couper que ce qui diverge vraiment. Une série de pertes n\'est pas un motif de couper au hasard — mais c\'est un motif de regarder.']);
+  } else if(ps.courante>0 && ps.courante>=pLim-1){
+    avis.push(['warn','Série de pertes en cours ('+ps.courante+' / '+pLim+')',
+      'Encore '+(pLim-ps.courante)+' perte(s) et tu touches ta limite.'+cadre
+      +' Rien à décider maintenant : c\'est la limite que tu as fixée à froid qui déclenche l\'action, pas la sensation d\'enchaîner.']);
+  }
+  if(pRef!=null && pRef>=pLim){
+    avis.push(['warn','Ta limite de trades perdants est sous l\'historique du portefeuille',
+      'Ta limite ('+pLim+') est inférieure ou égale à la pire série du portefeuille backtesté ('+pRef+'). Tu la toucheras donc tôt ou tard sans qu\'aucun set ne soit défaillant. Décide à froid : soit tu l\'assumes comme un stop de sécurité, soit tu la remontes au-dessus de '+pRef+' dans l\'onglet « Garde-fou risque ».']);
+  }
+
   if(ddRef!=null && ddRef>=ddMax){
     avis.push(['warn','Ta limite de drawdown est sous l\'historique du portefeuille','Ta limite ('+pct(ddMax,1)+') est inférieure au drawdown déjà vécu par le portefeuille backtesté ('+pct(ddRef,2)+'). Statistiquement, tu finiras par toucher ta limite même si tout fonctionne. Décide MAINTENANT, à froid : soit tu l\'assumes comme un vrai stop de sécurité, soit tu baisses le risque par trade pour t\'en éloigner.']);
   }
@@ -3293,7 +3402,9 @@ document.getElementById('calcSym').addEventListener('change',e=>{const d={forex:
 /* ---------- settings save ---------- */
 document.getElementById('saveRisk').addEventListener('click',()=>{
   // Object.assign : ne PAS écraser d'éventuels réglages absents de ce formulaire.
-  store.settings=Object.assign({}, store.settings, {balance:Number(document.getElementById('setBalance').value)||100000,riskPct:Number(document.getElementById('setRiskPct').value)||0.1,ddWarn:Number(document.getElementById('setDdWarn').value)||6,ddMax:Number(document.getElementById('setDdMax').value)||10});
+  store.settings=Object.assign({}, store.settings, {balance:Number(document.getElementById('setBalance').value)||100000,riskPct:Number(document.getElementById('setRiskPct').value)||0.1,ddWarn:Number(document.getElementById('setDdWarn').value)||6,ddMax:Number(document.getElementById('setDdMax').value)||10,
+    // série de pertes : un entier ≥ 1 (0 ou vide n'aurait aucun sens comme limite)
+    pertesMax:Math.max(1,Math.round(Number(document.getElementById('setPertesMax').value)||6))});
   profilRanger();   // les réglages appartiennent au profil du compte affiché
   // renderBacktests : les cartes affichent le risque cible, render() ne les redessine pas.
   saveStore(store); render(); majLibellesRisque(); renderBacktests(lastA); flash('Paramètres enregistrés du compte « '+compteNom()+' »');
