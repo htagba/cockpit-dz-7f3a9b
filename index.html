@@ -1306,37 +1306,32 @@ function pertesSerie(a){
   });
   return {courante:cur, max, depuis:cur?debut:null, debutMax, finMax, n:cl.length};
 }
-/* Pire série de pertes du PORTEFEUILLE backtesté (compte commun, tous sets
-   mélangés chronologiquement) : la seule référence honnête pour juger une série
-   réelle. null si les backtests n'ont pas le détail des deals (imports anciens).
-   `sim` : réutilise une simulation déjà calculée par l'appelant. */
-let pertesRefCache=null;
-function pertesRefBacktest(sim){
-  const bts=(store.backtests||[]).filter(b=>b.included!==false);
-  if(!bts.length) return null;
-  const cle=compteActifId+'|'+bts.map(b=>(b.deals||[]).length).join(',');
-  if(!sim && pertesRefCache && pertesRefCache.cle===cle) return pertesRefCache.val;
-  const r=(sim||btSimuleCompteUnique(bts,100000,1)).retsTrades;
-  let val=null;
-  if(r&&r.length){ let max=0,cur=0; r.forEach(v=>{ if(v<0){cur++; if(cur>max)max=cur;} else if(v>0) cur=0; }); val=max||null; }
-  pertesRefCache={cle, val};
-  return val;
+/* Pire série de pertes de RÉFÉRENCE = « Séries perdantes max » de l'onglet
+   « Stats historique Portfolio » (rapport QuantAnalyzer du portefeuille, importé
+   ou intégré). C'est la même valeur des deux côtés : une seule source, pas deux
+   chiffres qui se contredisent. Renvoie {val, source} ou null si le rapport ne
+   porte pas la statistique. */
+function pertesRefBacktest(){
+  const R=store.pfReport||PF_REPORT;
+  const v=Number(((R||{}).detail||{}).maxConsecLosses);
+  if(!Number.isFinite(v)||v<1) return null;
+  return {val:Math.round(v), source:store.pfReport?'rapport importé':'rapport intégré'};
 }
 /* Niveau d'alerte : rouge à la limite, orange à un trade de la limite. */
 function pertesNiveau(courante, lim){ return courante>=lim?'r':(courante>=Math.max(lim-1,1)?'a':'g'); }
 
 function renderPertes(a){
   const tag=document.getElementById('pertesTag'); if(!tag) return;
-  const s=pertesSerie(a), lim=pertesMaxRegl(), ref=pertesRefBacktest();
+  const s=pertesSerie(a), lim=pertesMaxRegl(), r=pertesRefBacktest(), ref=r&&r.val;
   const niv=pertesNiveau(s.courante, lim);
   tag.textContent=s.n?(s.courante+' / '+lim):'—';
   tag.className='tag '+(s.n?niv:'a');
   const bar=document.querySelector('#pertesBar > span');
   bar.style.width=clamp(s.courante/lim*100,0,100)+'%';
   bar.style.background=niv==='r'?'var(--red)':niv==='a'?'var(--amber)':'var(--green)';
-  // Le repère sur la jauge = la pire série du portefeuille backtesté.
+  // Le repère sur la jauge = la pire série du rapport portfolio.
   const ligne=document.getElementById('pertesLine');
-  if(ref!=null){ ligne.style.display=''; ligne.style.left=clamp(ref/lim*100,0,100)+'%'; ligne.title='Pire série du portefeuille backtesté : '+ref+' pertes'; }
+  if(ref){ ligne.style.display=''; ligne.style.left=clamp(ref/lim*100,0,100)+'%'; ligne.title='Séries perdantes max du rapport portfolio : '+ref; }
   else ligne.style.display='none';
   document.getElementById('pertesMetaL').textContent='En cours : '+s.courante+' perte(s) · limite '+lim;
   document.getElementById('pertesMetaR').textContent='Marge : '+Math.max(lim-s.courante,0)+' trade(s)';
@@ -1346,15 +1341,15 @@ function renderPertes(a){
     {lab:'Ta limite', val:String(lim), sub:'réglable dans « Paramètres de risque »'},
     {lab:'Pire série vécue', val:s.max?String(s.max):'—', cls:s.max>=lim?'neg':'',
      sub:s.n+' trade(s) clôturé(s)'},
-    {lab:'Référence backtest', val:ref!=null?String(ref):'—', cls:(ref!=null&&ref>=lim)?'warn':'',
-     sub:ref!=null?'pire série du portefeuille':'détail des deals absent'}
+    {lab:'Référence portfolio', val:ref?String(ref):'—', cls:(ref&&ref>=lim)?'warn':'',
+     sub:ref?('« Séries perdantes max » · '+r.source):'statistique absente du rapport'}
   ].map(statHTML).join('');
   const h=document.getElementById('pertesHelp');
   let txt='Comptée sur tes trades réels clôturés, tous sets confondus, dans l\'ordre de clôture. Un trade à zéro ne casse pas la série.';
-  if(ref!=null && ref>=lim){
-    txt+=' <b class="neg">Ta limite ('+lim+') est sous la pire série du portefeuille backtesté ('+ref+').</b> Statistiquement tu la toucheras même si tout fonctionne normalement : soit tu l\'assumes comme un vrai stop de sécurité, soit tu la remontes au-dessus de '+ref+'.';
-  } else if(ref!=null){
-    txt+=' Le repère sur la jauge est la pire série du portefeuille backtesté ('+ref+' pertes d\'affilée) : en dessous, une série reste dans le cadre connu.';
+  if(ref && ref>=lim){
+    txt+=' <b class="neg">Ta limite ('+lim+') est sous les « Séries perdantes max » du rapport portfolio ('+ref+').</b> Statistiquement tu la toucheras même si tout fonctionne normalement : soit tu l\'assumes comme un vrai stop de sécurité, soit tu la remontes au-dessus de '+ref+'.';
+  } else if(ref){
+    txt+=' Le repère sur la jauge est la pire série du rapport portfolio ('+ref+' pertes d\'affilée, onglet « Stats historique Portfolio ») : en dessous, une série reste dans le cadre connu.';
   }
   h.innerHTML=txt;
 }
@@ -2796,11 +2791,11 @@ function conseilsPortefeuille(a){
     avis.push(['warn','Drawdown dans la zone haute du backtest','Ton creux actuel ('+pct(a.curDDpct,2)+') approche le pire du portefeuille backtesté ('+pct(ddRef,2)+'). Rien d\'anormal statistiquement, mais c\'est le moment de vérifier que chaque set trade bien comme prévu (sections ci-dessous) plutôt que d\'espérer.']);
   }
   // --- série de trades perdants : le second garde-fou, en nombre de trades ---
-  const ps=pertesSerie(a), pLim=pertesMaxRegl(), pRef=pertesRefBacktest(simP);
-  const cadre=pRef!=null
-    ? ' Le portefeuille backtesté a déjà enchaîné '+pRef+' pertes d\'affilée : '
+  const ps=pertesSerie(a), pLim=pertesMaxRegl(), pR=pertesRefBacktest(), pRef=pR&&pR.val;
+  const cadre=pRef
+    ? ' Le rapport portfolio (onglet « Stats historique Portfolio ») affiche '+pRef+' pertes d\'affilée au pire : '
       +(ps.courante<=pRef?'tu es encore DANS le cadre connu — la série n\'est pas la preuve que quelque chose est cassé.'
-                         :'tu es AU-DELÀ de ce que le backtest a produit, ce qui justifie une vérification set par set.')
+                         :'tu es AU-DELÀ de ce que le portefeuille a produit sur son historique, ce qui justifie une vérification set par set.')
     : '';
   if(ps.courante>=pLim){
     avis.push(['danger','Limite de trades perdants atteinte ('+ps.courante+' / '+pLim+')',
@@ -2811,9 +2806,9 @@ function conseilsPortefeuille(a){
       'Encore '+(pLim-ps.courante)+' perte(s) et tu touches ta limite.'+cadre
       +' Rien à décider maintenant : c\'est la limite que tu as fixée à froid qui déclenche l\'action, pas la sensation d\'enchaîner.']);
   }
-  if(pRef!=null && pRef>=pLim){
+  if(pRef && pRef>=pLim){
     avis.push(['warn','Ta limite de trades perdants est sous l\'historique du portefeuille',
-      'Ta limite ('+pLim+') est inférieure ou égale à la pire série du portefeuille backtesté ('+pRef+'). Tu la toucheras donc tôt ou tard sans qu\'aucun set ne soit défaillant. Décide à froid : soit tu l\'assumes comme un stop de sécurité, soit tu la remontes au-dessus de '+pRef+' dans l\'onglet « Garde-fou risque ».']);
+      'Ta limite ('+pLim+') est inférieure ou égale aux « Séries perdantes max » du rapport portfolio ('+pRef+'). Tu la toucheras donc tôt ou tard sans qu\'aucun set ne soit défaillant. Décide à froid : soit tu l\'assumes comme un stop de sécurité, soit tu la remontes au-dessus de '+pRef+' dans l\'onglet « Garde-fou risque ».']);
   }
 
   if(ddRef!=null && ddRef>=ddMax){
