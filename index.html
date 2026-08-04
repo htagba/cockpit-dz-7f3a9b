@@ -248,6 +248,26 @@
       </div>
     </div>
 
+    <div class="card" style="margin-top:14px">
+      <h3>Séries consécutives <span style="font-weight:400;color:var(--dim);font-size:11px">(tous sets confondus, dans l'ordre de clôture)</span></h3>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:2px 0 8px">
+        <b style="font-size:13px">🔻 Pertes d'affilée</b><span class="tag a" id="pertesTag">—</span>
+      </div>
+      <div class="bar" id="pertesBar"><span style="width:0%;background:var(--green)"></span><div class="barline" id="pertesLine" style="left:100%"></div></div>
+      <div class="meta"><span id="pertesMetaL">—</span><span id="pertesMetaR">—</span></div>
+      <div class="grid g4" id="pertesStats" style="margin-top:14px"></div>
+      <div class="help" id="pertesHelp" style="margin-top:10px">Un trade à zéro ne casse pas la série.</div>
+
+      <div style="border-top:1px solid var(--border);margin-top:16px"></div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:14px 0 8px">
+        <b style="font-size:13px">🔺 Gains d'affilée</b><span class="tag a" id="gainsTag">—</span>
+      </div>
+      <div class="grid g3" id="gainsStats"></div>
+      <div class="help" id="gainsHelp" style="margin-top:10px">Informatif : aucune limite à fixer ici.</div>
+    </div>
+
     <div class="grid g2" style="margin-top:14px">
       <div class="card">
         <h3>Phase de calibration (création du DARWIN)</h3>
@@ -349,14 +369,6 @@
         <div class="help">Lot = (capital × risque%) ÷ (SL points × valeur du point). Vérifie toujours la valeur du point sur ton broker.</div>
       </div>
     </div>
-    <div class="card" style="margin-top:14px">
-      <h3>Série de pertes consécutives <span class="tag a" id="pertesTag">—</span></h3>
-      <div class="bar" id="pertesBar"><span style="width:0%;background:var(--green)"></span><div class="barline" id="pertesLine" style="left:100%"></div></div>
-      <div class="meta"><span id="pertesMetaL">—</span><span id="pertesMetaR">—</span></div>
-      <div class="grid g4" id="pertesStats" style="margin-top:14px"></div>
-      <div class="help" id="pertesHelp" style="margin-top:10px">Compté sur tes trades réels clôturés, tous sets confondus, dans l'ordre de clôture. Un trade à zéro ne casse pas la série.</div>
-    </div>
-
     <div class="card" style="margin-top:14px">
       <h3>Budget de risque par set</h3>
       <table id="riskTable"><thead><tr><th>Set</th><th>Trades</th><th>Perte cumulée</th><th>Drawdown</th><th>Part du budget risque</th><th>État</th></tr></thead><tbody><tr><td colspan="6" class="empty">Aucune donnée.</td></tr></tbody></table>
@@ -1358,7 +1370,7 @@ function render(){
   store.settings.balance=Math.round(a.balance);
   document.getElementById('setBalance').value=Math.round(a.balance);
   renderTop(a); renderDonuts(a); renderDD(a); renderScore(a); renderCalibration(a); renderAdvice(a); renderMoisCourant(a);
-  renderSets(a); renderRiskTab(a); renderPertes(a); renderJournal(a); renderDarwinTab(a); renderAnalyse(a);
+  renderSets(a); renderRiskTab(a); renderPertes(a); renderGains(a); renderJournal(a); renderDarwinTab(a); renderAnalyse(a);
   renderHeat(a); renderMonthHeat(a); renderControle(a);
   lastA=a; renderBtCompare(a); renderStale(); renderRegistreTab();
 }
@@ -1599,32 +1611,36 @@ function renderSets(a){
 }
 function setDD(g, base){ const c=g.closed.slice().filter(t=>t.closeTime).sort((a,b)=>a.closeTime-b.closeTime); let run=0,peak=0,mdd=0; c.forEach(t=>{run+=t.profit;if(run>peak)peak=run;const d=peak-run;if(d>mdd)mdd=d;}); base=base||store.settings.balance||100000; return base>0?mdd/base*100:0; }
 
-/* ---------- garde-fou « trades perdants d'affilée » ----------
+/* ---------- séries consécutives (garde-fou « trades perdants ») ----------
    La série est comptée sur le COMPTE, tous sets confondus, dans l'ordre de
    clôture : c'est celle que tu vis vraiment, pas celle d'un set isolé. Un trade
    à 0 (break-even, SL déplacé) ne prolonge ni ne casse la série — même
-   convention que journalCompute(). */
+   convention que journalCompute(). `sens` : -1 = pertes, +1 = gains. */
 function pertesMaxRegl(){ const v=Math.round(Number((store.settings||{}).pertesMax)); return v>=1?v:6; }
-function pertesSerie(a){
+function serieConsec(a, sens){
   const cl=((a&&a.closed)||[]).filter(t=>t.closeTime).sort((x,y)=>x.closeTime-y.closeTime);
-  let max=0, cur=0, debut=null, debutMax=null, finMax=null;
+  let max=0, cur=0, debut=null;
   cl.forEach(t=>{
-    if(t.profit<0){ if(!cur) debut=t.closeTime; cur++; if(cur>max){ max=cur; debutMax=debut; finMax=t.closeTime; } }
-    else if(t.profit>0) cur=0;
+    if(sens>0?t.profit>0:t.profit<0){ if(!cur) debut=t.closeTime; cur++; if(cur>max) max=cur; }
+    else if(sens>0?t.profit<0:t.profit>0) cur=0;
   });
-  return {courante:cur, max, depuis:cur?debut:null, debutMax, finMax, n:cl.length};
+  return {courante:cur, max, depuis:cur?debut:null, n:cl.length};
 }
-/* Pire série de pertes de RÉFÉRENCE = « Séries perdantes max » de l'onglet
-   « Stats historique Portfolio » (rapport QuantAnalyzer du portefeuille, importé
-   ou intégré). C'est la même valeur des deux côtés : une seule source, pas deux
+function pertesSerie(a){ return serieConsec(a,-1); }
+function gainsSerie(a){ return serieConsec(a,1); }
+/* Séries de RÉFÉRENCE = « Séries perdantes / gagnantes max » de l'onglet « Stats
+   historique Portfolio » (rapport QuantAnalyzer du portefeuille, importé ou
+   intégré). C'est la même valeur des deux côtés : une seule source, pas deux
    chiffres qui se contredisent. Renvoie {val, source} ou null si le rapport ne
    porte pas la statistique. */
-function pertesRefBacktest(){
+function serieRefBacktest(champ){
   const R=store.pfReport||PF_REPORT;
-  const v=Number(((R||{}).detail||{}).maxConsecLosses);
+  const v=Number(((R||{}).detail||{})[champ]);
   if(!Number.isFinite(v)||v<1) return null;
   return {val:Math.round(v), source:store.pfReport?'rapport importé':'rapport intégré'};
 }
+function pertesRefBacktest(){ return serieRefBacktest('maxConsecLosses'); }
+function gainsRefBacktest(){ return serieRefBacktest('maxConsecWins'); }
 /* Niveau d'alerte : rouge à la limite, orange à un trade de la limite. */
 function pertesNiveau(courante, lim){ return courante>=lim?'r':(courante>=Math.max(lim-1,1)?'a':'g'); }
 
@@ -1646,19 +1662,45 @@ function renderPertes(a){
   document.getElementById('pertesStats').innerHTML=[
     {lab:'Série en cours', val:String(s.courante), cls:niv==='r'?'neg':niv==='a'?'warn':'pos',
      sub:s.depuis?('depuis le '+s.depuis.toLocaleDateString('fr-FR')):'aucune série ouverte'},
-    {lab:'Ta limite', val:String(lim), sub:'réglable dans « Paramètres de risque »'},
+    {lab:'Ta limite', val:String(lim), sub:'onglet « Garde-fou risque »'},
     {lab:'Pire série vécue', val:s.max?String(s.max):'—', cls:s.max>=lim?'neg':'',
      sub:s.n+' trade(s) clôturé(s)'},
     {lab:'Référence portfolio', val:ref?String(ref):'—', cls:(ref&&ref>=lim)?'warn':'',
      sub:ref?('« Séries perdantes max » · '+r.source):'statistique absente du rapport'}
   ].map(statHTML).join('');
   const h=document.getElementById('pertesHelp');
-  let txt='Comptée sur tes trades réels clôturés, tous sets confondus, dans l\'ordre de clôture. Un trade à zéro ne casse pas la série.';
+  let txt='Un trade à zéro ne casse pas la série. Limite réglable dans « Garde-fou risque ».';
   if(ref && ref>=lim){
     txt+=' <b class="neg">Ta limite ('+lim+') est sous les « Séries perdantes max » du rapport portfolio ('+ref+').</b> Statistiquement tu la toucheras même si tout fonctionne normalement : soit tu l\'assumes comme un vrai stop de sécurité, soit tu la remontes au-dessus de '+ref+'.';
   } else if(ref){
     txt+=' Le repère sur la jauge est la pire série du rapport portfolio ('+ref+' pertes d\'affilée, onglet « Stats historique Portfolio ») : en dessous, une série reste dans le cadre connu.';
   }
+  h.innerHTML=txt;
+}
+
+/* Pendant « gains » : pas de jauge ni de limite — personne ne se fixe un plafond
+   de trades gagnants. C'est un repère, et surtout un rappel : une belle série ne
+   valide rien et n'autorise pas à monter le risque. */
+function renderGains(a){
+  const tag=document.getElementById('gainsTag'); if(!tag) return;
+  const s=gainsSerie(a), r=gainsRefBacktest(), ref=r&&r.val;
+  tag.textContent=s.n?String(s.courante):'—';
+  tag.className='tag '+(s.n&&s.courante?'g':'a');
+  document.getElementById('gainsStats').innerHTML=[
+    {lab:'Série en cours', val:String(s.courante), cls:s.courante?'pos':'',
+     sub:s.depuis?('depuis le '+s.depuis.toLocaleDateString('fr-FR')):'aucune série ouverte'},
+    {lab:'Meilleure série vécue', val:s.max?String(s.max):'—', cls:s.max?'pos':'',
+     sub:s.n+' trade(s) clôturé(s)'},
+    {lab:'Référence portfolio', val:ref?String(ref):'—',
+     sub:ref?('« Séries gagnantes max » · '+r.source):'statistique absente du rapport'}
+  ].map(statHTML).join('');
+  const h=document.getElementById('gainsHelp');
+  let txt='Aucune limite à fixer ici : une série de gains ne se pilote pas.';
+  if(ref){
+    txt+=' Le portefeuille backtesté a enchaîné jusqu\'à <b>'+ref+'</b> gains d\'affilée — ta série actuelle se lit par rapport à ça.';
+    if(s.max>ref) txt+=' Ta meilleure série ('+s.max+') dépasse déjà cette référence : c\'est de la chance sur un petit échantillon, pas une amélioration du système.';
+  }
+  txt+=' <b>Le piège d\'une bonne série est d\'augmenter le risque</b> — le backtest suppose un risque constant, c\'est lui qui produit la courbe.';
   h.innerHTML=txt;
 }
 
