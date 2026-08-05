@@ -11,9 +11,9 @@
    "fichier": "data.json"
   },
   {
-   "id": "SwingSniper",
-   "nom": "Swing Sniper",
-   "fichier": "data-swingsniper.json"
+   "id": "DoltMultiStrategy",
+   "nom": "Dolt MultiStrategy",
+   "fichier": "data-dolt-multistrategy.json"
   }
  ]
 }
