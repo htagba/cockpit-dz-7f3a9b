@@ -27,7 +27,11 @@
   ::-webkit-scrollbar-track{background:transparent}
   ::-webkit-scrollbar-thumb{background:#2a3140;border-radius:99px;border:2px solid var(--bg)}
   ::-webkit-scrollbar-thumb:hover{background:#3a445a}
-  .wrap{max-width:1180px;margin:0 auto;padding:20px 22px 60px}
+  /* Plafond large : sur un écran de bureau la zone centrale doit remplir la place
+     disponible (1180px y laissait ~480px de vide et tronquait les tuiles). Le cap
+     subsiste pour les écrans ultra-larges, où des paragraphes d'aide pleine
+     largeur deviendraient illisibles. */
+  .wrap{max-width:1680px;margin:0 auto;padding:20px 22px 60px}
   header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
   .brand{display:flex;align-items:center;gap:12px}
   @keyframes logoShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
@@ -120,7 +124,12 @@
   .ring .num small{font-size:10px;color:var(--muted)}
   canvas{max-width:100%}
   .empty{text-align:center;color:var(--dim);padding:40px 20px;font-size:13px}
-  .help{font-size:11px;color:var(--dim);margin-top:4px}
+  /* max-width : au-delà de ~110 caractères la ligne devient pénible à suivre.
+     Sans ce plafond, l'élargissement de .wrap étirerait les blocs explicatifs
+     sur toute la largeur de l'écran. Les .help des tuiles sont bien plus
+     étroits que cette limite : elle ne les touche pas. */
+  .help{font-size:11px;color:var(--dim);margin-top:4px;max-width:110ch}
+  .alert>div{max-width:110ch}
   .kpi-mini{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
   .kpi-mini:last-child{border:none}
   .kpi-mini .v{font-weight:600;font-variant-numeric:tabular-nums}
@@ -1207,8 +1216,11 @@ async function idbGet(k){const db=await idb();return new Promise((res,rej)=>{con
    commentaire piégé « <img onerror=…> » s'exécuterait sans ce filtre. */
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=(n,d=2)=>Number(n).toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d});
-const money=n=>fmt(n,2)+' $';
-const pct=(n,d=2)=>fmt(n,d)+' %';
+/* Espace INSÉCABLE avant l'unité : avec une espace normale, « 101 202,05 $ »
+   laissait partir le « $ » seul à la ligne suivante dans les tuiles étroites
+   (typographie française : l'unité ne se sépare jamais du nombre). */
+const money=n=>fmt(n,2)+' $';
+const pct=(n,d=2)=>fmt(n,d)+' %';
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 
 /* ---------- risque ----------
