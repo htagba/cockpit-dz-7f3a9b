@@ -1449,8 +1449,8 @@ function renderTop(a){
     {lab:'Solde',ico:'M3 3v18h18',val:money(a.balance),delta:`Équité ${money(a.equity)}`},
     {lab:'P&L réalisé',val:(a.realized>=0?'+':'')+money(a.realized),cls:a.realized>=0?'pos':'neg',delta:pct(a.retPct)+' du capital'},
     {lab:'P&L cette semaine',val:(sem.pnl>=0?'+':'')+money(sem.pnl),cls:sem.pnl>0?'pos':sem.pnl<0?'neg':'',
-     delta:sem.n?((sem.ret>=0?'+':'')+pct(sem.ret)+' · '+sem.n+' trade(s)'):'aucun trade clôturé',
-     title:'Repart de zéro à l\'ouverture des marchés le dimanche soir (lundi 00:00 heure serveur MT5). Semaine en cours depuis le '+sem.debut.toLocaleDateString('fr-FR')+'.'},
+     delta:sem.n?((sem.ret>=0?'+':'')+pct(sem.ret)+' · '+sem.n+' clôturé(s)'):'aucun trade clôturé',
+     title:'P&L RÉALISÉ : compte les trades CLÔTURÉS cette semaine, quelle que soit leur date d\'ouverture (un trade n\'est réalisé qu\'à sa clôture). Les positions encore ouvertes sont dans « P&L latent ». Repart de zéro à l\'ouverture des marchés le dimanche soir (lundi 00:00 heure serveur MT5). Semaine en cours depuis le '+sem.debut.toLocaleDateString('fr-FR')+'.'},
     {lab:'P&L latent',val:(a.floating>=0?'+':'')+money(a.floating),cls:a.floating>0?'pos':a.floating<0?'neg':'',
      delta:a.open.length?(a.open.length+' position(s) ouverte(s)'):'aucune position ouverte'},
     {lab:'Drawdown actuel',val:pct(a.curDDpct),cls:a.curDDpct>=store.settings.ddWarn?'neg':a.curDDpct>=store.settings.ddWarn*0.6?'warn':'pos',delta:`max ${pct(a.maxDDpct)}`}
