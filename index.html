@@ -1321,6 +1321,12 @@ function analyze(data){
   const balance=curBalance;                 // solde = ce que renvoie le broker
   const equity=curBalance+floating;         // équité = solde + P&L flottant des positions ouvertes
   const dep=balance-realized;               // dépôt initial reconstitué (~100 000) pour la courbe et le rendement
+  /* Heure du SERVEUR MT5 telle qu'écrite dans l'export (`exportedAt`, SANS fuseau) :
+     parsée par parseT() elle vit dans le même référentiel que les closeTime des
+     trades, donc getDay()/getDate() y rendent bien les champs du serveur. C'est
+     la seule base saine pour découper des semaines (voir semaineLive). Repli sur
+     l'horloge du navigateur si l'export ne porte pas la date. */
+  const nowSrv=parseT(data.exportedAt)||new Date();
   // groups
   const groups={};
   trades.forEach(t=>{const k=setKey(t);(groups[k]=groups[k]||{key:k,trades:[],closed:[],open:[],pl:0,floating:0}); groups[k].trades.push(t); if(t.open){groups[k].open.push(t);groups[k].floating+=t.profit;}else{groups[k].closed.push(t);groups[k].pl+=t.profit;}});
@@ -1347,7 +1353,7 @@ function analyze(data){
   const dvals=Object.values(dayPnl);
   let consistency=0;
   if(dvals.length>=2){const m=dvals.reduce((a,b)=>a+b,0)/dvals.length;const sd=Math.sqrt(dvals.reduce((a,b)=>a+(b-m)*(b-m),0)/dvals.length);const cv=m!==0?Math.abs(sd/m):3;consistency=clamp(100-cv*30,0,100);}
-  return {dep,trades,closed,open,realized,floating,balance,equity,groups,curve,maxDDpct,curDDpct,days:days.size,winRate,pf,grossW,grossL,retPct,wins:wins.length,losses:losses.length,consistency,dayPnl};
+  return {dep,trades,closed,open,realized,floating,balance,equity,groups,curve,maxDDpct,curDDpct,days:days.size,winRate,pf,grossW,grossL,retPct,wins:wins.length,losses:losses.length,consistency,dayPnl,nowSrv};
 }
 
 /* DScore-style estimate (transparent, not the real proprietary one) */
@@ -1402,18 +1408,43 @@ function renderDonuts(a){
     c=>' '+c.label+' : '+fmt(c.parsed/tot*100,2)+' % ('+c.parsed+' trade'+(c.parsed>1?'s':'')+')');
   else donut(cvS,['Aucun trade'],[1],['#1c2129'],c=>' '+c.label);
 }
+/* ---------- semaine de trading en cours ----------
+   La semaine repart à l'OUVERTURE DES MARCHÉS, le dimanche soir. Sur MT5 ce
+   moment est, par construction, le LUNDI 00:00 DE L'HEURE SERVEUR : le fuseau
+   du broker (GMT+2/+3 chez Darwinex) est justement calé pour que la semaine de
+   cotation tienne dans lundi→vendredi. Comparer des dates du serveur à
+   new Date() (heure du navigateur) décalerait la frontière d'une heure et
+   ferait basculer les trades d'ouverture dans la semaine précédente — d'où
+   a.nowSrv partout ici. */
+function debutSemaineServeur(now){
+  const d=new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  d.setDate(d.getDate() - ((d.getDay()+6)%7));   // recule au lundi 00:00 (dimanche → lundi précédent)
+  return d;
+}
+function semaineLive(a){
+  const debut=debutSemaineServeur(a.nowSrv||new Date());
+  const cl=a.closed.filter(t=>t.closeTime&&t.closeTime>=debut);
+  const pnl=cl.reduce((s,t)=>s+t.profit,0);
+  const base=a.balance-pnl;                      // solde à l'ouverture de la semaine
+  return {pnl, n:cl.length, ret:base>0?pnl/base*100:0, debut};
+}
+
 function renderTop(a){
   const ds=estimateDScore(a);
+  const sem=semaineLive(a);
   const cards=[
     {lab:'DScore estimé',ico:'M12 2 4 7v6c0 5 8 9 8 9s8-4 8-9V7l-8-5Z',val:ds.score,cls:ds.score>=60?'pos':ds.score>=55?'warn':'',delta:ds.score>=60?'−40 % commissions':ds.score>=55?'−20 % commissions':'objectif 55'},
     {lab:'Solde',ico:'M3 3v18h18',val:money(a.balance),delta:`Équité ${money(a.equity)}`},
     {lab:'P&L réalisé',val:(a.realized>=0?'+':'')+money(a.realized),cls:a.realized>=0?'pos':'neg',delta:pct(a.retPct)+' du capital'},
+    {lab:'P&L cette semaine',val:(sem.pnl>=0?'+':'')+money(sem.pnl),cls:sem.pnl>0?'pos':sem.pnl<0?'neg':'',
+     delta:sem.n?((sem.ret>=0?'+':'')+pct(sem.ret)+' · '+sem.n+' trade(s)'):'aucun trade clôturé',
+     title:'Repart de zéro à l\'ouverture des marchés le dimanche soir (lundi 00:00 heure serveur MT5). Semaine en cours depuis le '+sem.debut.toLocaleDateString('fr-FR')+'.'},
     {lab:'P&L latent',val:(a.floating>=0?'+':'')+money(a.floating),cls:a.floating>0?'pos':a.floating<0?'neg':'',
      delta:a.open.length?(a.open.length+' position(s) ouverte(s)'):'aucune position ouverte'},
     {lab:'Drawdown actuel',val:pct(a.curDDpct),cls:a.curDDpct>=store.settings.ddWarn?'neg':a.curDDpct>=store.settings.ddWarn*0.6?'warn':'pos',delta:`max ${pct(a.maxDDpct)}`}
   ];
   document.getElementById('topStats').innerHTML=cards.map(c=>`
-    <div class="stat"><div class="lab">${c.lab}</div><div class="val ${c.cls||''}">${c.val}</div><div class="delta">${c.delta||''}</div></div>`).join('');
+    <div class="stat"${c.title?` title="${esc(c.title)}"`:''}><div class="lab">${c.lab}</div><div class="val ${c.cls||''}">${c.val}</div><div class="delta">${c.delta||''}</div></div>`).join('');
 }
 
 function renderDD(a){
