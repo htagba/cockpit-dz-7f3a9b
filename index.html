@@ -1053,6 +1053,12 @@ document.getElementById('compteSel').addEventListener('change',e=>changerCompte(
    Les données sont relues à chaque ouverture de l'onglet puis toutes les
    POLL_MS tant qu'il reste affiché. */
 let vueTimer=null;
+/* 5 min entre deux rafraîchissements de la vue : chaque cycle lit N-1 fichiers
+   (le compte affiché réutilise lastData). À 60 s, la vue à elle seule ajoutait
+   ~180 requêtes/heure vers raw.githubusercontent → GitHub a répondu HTTP 429
+   pour TOUTE l'app (limite par IP). Les cartes restent donc au pire 5 min en
+   retard — acceptable pour un tableau de bord de comptes. */
+const VUE_REFRESH_MS=5*60*1000;
 function majOngletVue(){
   const t=document.getElementById('tabVue'); if(!t) return;
   t.style.display=(COMPTES.length>1)?'':'none';
@@ -1068,9 +1074,15 @@ function vueUrl(c){ return c.fichier?DATA_ENDPOINT.replace(/data\.json$/,c.fichi
 const VUE_FRAICHEUR_MIN=45;
 async function chargerVue(){
   const grid=document.getElementById('vueGrid'); if(!grid) return;
+  if(document.hidden) return;                    // onglet en arrière-plan : ne pas consommer le quota
   const res=await Promise.all(COMPTES.map(async c=>{
     try{
+      // Compte affiché : ses données viennent d'être lues par le poll normal
+      // (fetchData, 1/min) — les re-télécharger doublerait les requêtes vers
+      // raw.githubusercontent, qui limite par IP/heure (déjà vécu : HTTP 429).
+      if(c.id===compteActifId && lastData) return {c, data:lastData};
       const r=await fetch(vueUrl(c)+'?t='+Date.now(),{cache:'no-store'});
+      if(r.status===429) throw new Error('429');
       if(!r.ok) throw new Error('HTTP '+r.status);
       return {c, data:await r.json()};
     }catch(e){ return {c, err:String(e&&e.message||e)}; }
@@ -1084,7 +1096,7 @@ async function chargerVue(){
     document.querySelector('.tab[data-v="cockpit"]').click();
   }));
   const meta=document.getElementById('vueMeta');
-  if(meta) meta.textContent='Actualisé à '+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+' · auto toutes les '+(POLL_MS/1000)+' s';
+  if(meta) meta.textContent='Actualisé à '+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+' · auto toutes les '+Math.round(VUE_REFRESH_MS/60000)+' min';
 }
 function vueCarte(r){
   const c=r.c, s=reglagesDuCompte(c.id);
@@ -1093,9 +1105,13 @@ function vueCarte(r){
   const tete='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">'
     +'<b style="font-size:14px">'+esc(c.nom)+'</b>';
   if(r.err||!r.data){
+    // 429 ≠ panne : GitHub limite les lectures par IP, le VPS publie normalement.
+    const limite=String(r.err)==='429';
     return '<div class="card vuecard" data-id="'+esc(c.id)+'" style="cursor:pointer">'+tete
-      +'<span class="tag r">injoignable</span></div>'
-      +'<div class="empty" style="padding:14px 0">Fichier illisible — vérifie la publication du VPS.<br><span style="font-size:11px">'+esc(r.err||'')+'</span></div></div>';
+      +'<span class="tag '+(limite?'a':'r')+'">'+(limite?'limité par GitHub':'injoignable')+'</span></div>'
+      +'<div class="empty" style="padding:14px 0">'+(limite
+        ?'GitHub limite temporairement les lectures (HTTP 429). Rien à faire : ça revient tout seul d\'ici quelques minutes.'
+        :'Fichier illisible — vérifie la publication du VPS.<br><span style="font-size:11px">'+esc(r.err||'')+'</span>')+'</div></div>';
   }
   const a=r.a||analyze(r.data), ps=pertesSerie(a), ds=estimateDScore(a);
   const t=parseT(r.data.exportedAtIso||r.data.exportedAt);
@@ -3935,8 +3951,16 @@ async function readHandle(){
   catch(e){ console.error(e); setConn(true,'Erreur de lecture'); }
 }
 async function fetchData(){
-  try{ const r=await fetch(dataEndpointActif()+'?t='+Date.now(),{cache:'no-store'}); if(!r.ok)throw new Error('HTTP '+r.status); ingest(await r.json()); }
-  catch(e){ console.error(e); setConn(false,'Fichier introuvable — le serveur tourne-t-il ?'); }
+  try{ const r=await fetch(dataEndpointActif()+'?t='+Date.now(),{cache:'no-store'});
+    if(r.status===429) throw new Error('429');
+    if(!r.ok)throw new Error('HTTP '+r.status); ingest(await r.json()); }
+  catch(e){ console.error(e);
+    // 429 : GitHub limite les lectures par IP/heure — les données existent, il
+    // faut juste attendre. Un message « fichier introuvable » ferait chercher
+    // une panne côté VPS qui n'existe pas.
+    setConn(false, String(e.message)==='429'
+      ? 'GitHub limite les lectures (429) — ça revient tout seul, réessai chaque minute'
+      : 'Fichier introuvable — le serveur tourne-t-il ?'); }
 }
 /* Affiche la fraîcheur des données en HEURE LOCALE + âge relatif.
    `exportedAt` est écrit à l'heure du serveur du broker (GMT+3 pour Darwinex) : on
@@ -4535,7 +4559,7 @@ document.getElementById('tabs').addEventListener('click',e=>{
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
   t.classList.add('active'); document.getElementById('v-'+t.dataset.v).classList.add('active');
   // Vue d'ensemble : relecture immédiate + rafraîchissement tant qu'elle est affichée.
-  if(t.dataset.v==='vue'){ chargerVue(); if(!vueTimer) vueTimer=setInterval(chargerVue,POLL_MS); }
+  if(t.dataset.v==='vue'){ chargerVue(); if(!vueTimer) vueTimer=setInterval(chargerVue,VUE_REFRESH_MS); }
   else if(vueTimer){ clearInterval(vueTimer); vueTimer=null; }
   if(t.dataset.v==='journal'&&lastData)render();
   if(t.dataset.v==='backtests')renderBacktests(lastA);
