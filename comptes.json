@@ -9,11 +9,6 @@
    "id": "flowVanguard-smc",
    "nom": "FlowVanguard SMC",
    "fichier": "data.json"
-  },
-  {
-   "id": "DoltMultiStrategy",
-   "nom": "Dolt MultiStrategy",
-   "fichier": "data-dolt-multistrategy.json"
   }
  ]
 }
